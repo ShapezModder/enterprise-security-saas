@@ -8,7 +8,7 @@ import { Shield, Zap, Lock, FileText, CheckCircle, ArrowRight, ChevronRight, Key
 import NeuralWave from "@/components/NeuralWave";
 import DeepDiveFeatures from "@/components/DeepDiveFeatures";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 export default function EnterprisePlatform() {
     const [view, setView] = useState<"landing" | "client" | "login" | "admin">("landing");
