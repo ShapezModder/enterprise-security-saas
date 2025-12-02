@@ -32,6 +32,7 @@ app.use(cors({
 }));
 
 // Redis / BullMQ setup
+const REDIS_URL = process.env.REDIS_URL;
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = Number(process.env.REDIS_PORT || 6379);
 let queue: Queue | null = null;
@@ -39,7 +40,13 @@ let redisConnection: any = null;
 
 (async function initRedis() {
     try {
-        redisConnection = new IORedis({ host: REDIS_HOST, port: REDIS_PORT, maxRetriesPerRequest: null });
+        if (REDIS_URL && REDIS_URL.startsWith('redis')) {
+            console.log('[API] Connecting to Redis using REDIS_URL');
+            redisConnection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+        } else {
+            console.log(`[API] Connecting to Redis using host: ${REDIS_HOST}:${REDIS_PORT}`);
+            redisConnection = new IORedis({ host: REDIS_HOST, port: REDIS_PORT, maxRetriesPerRequest: null });
+        }
         await redisConnection.ping();
         queue = new Queue('enterprise-scan-queue', { connection: redisConnection });
         console.log('[API] Connected to Redis and Bull queue is ready');
