@@ -23,8 +23,16 @@ const WORDLIST_URL = 'https://raw.githubusercontent.com/danielmiessler/SecLists/
 const WP_DETECTION_KEYWORDS = ['wp-content', 'wp-login.php', 'wordpress'];
 
 // Socket.IO client for streaming logs to admin dashboard
-const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001';
-const socket = ioClient(API_URL);
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001';
+console.log(`[WORKER] Raw API_URL: '${rawApiUrl}'`);
+
+let apiUrl = rawApiUrl;
+if (apiUrl.startsWith('/') && !apiUrl.startsWith('//')) {
+    console.warn(`[WORKER] API_URL starts with '/', which is invalid for Node.js worker. Falling back to http://localhost:3001`);
+    apiUrl = 'http://localhost:3001';
+}
+
+const socket = ioClient(apiUrl);
 
 socket.on('connect', () => {
     console.log('[SCANNER] Connected to API for log streaming');
