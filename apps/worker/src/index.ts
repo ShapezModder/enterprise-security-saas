@@ -35,6 +35,9 @@ if (redisUrl && !redisUrl.startsWith('/')) {
 }
 
 const connection = new IORedis(redisConfig, { maxRetriesPerRequest: null });
+connection.on('error', (err) => {
+  console.error('[WORKER] Redis Connection Error:', err);
+});
 
 // Create dummy HTTP server for Render Health Checks (Free Tier Requirement)
 const port = process.env.PORT || 3002;

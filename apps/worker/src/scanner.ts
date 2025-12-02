@@ -34,6 +34,10 @@ if (apiUrl.startsWith('/') && !apiUrl.startsWith('//')) {
 
 const socket = ioClient(apiUrl);
 
+socket.on('connect_error', (err) => {
+    console.error(`[SCANNER] Socket.IO Connection Error (URL: ${apiUrl}):`, err);
+});
+
 socket.on('connect', () => {
     console.log('[SCANNER] Connected to API for log streaming');
 });
