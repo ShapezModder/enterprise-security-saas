@@ -23,7 +23,8 @@ const WORDLIST_URL = 'https://raw.githubusercontent.com/danielmiessler/SecLists/
 const WP_DETECTION_KEYWORDS = ['wp-content', 'wp-login.php', 'wordpress'];
 
 // Socket.IO client for streaming logs to admin dashboard
-const socket = ioClient('http://localhost:3001');
+const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001';
+const socket = ioClient(API_URL);
 
 socket.on('connect', () => {
     console.log('[SCANNER] Connected to API for log streaming');

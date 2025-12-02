@@ -28,5 +28,8 @@ RUN npm run build
 # Expose port
 EXPOSE 3002
 
+# Debug: List built files
+RUN ls -R dist
+
 # Start worker
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

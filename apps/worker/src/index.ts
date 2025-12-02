@@ -1,3 +1,4 @@
+console.log('[WORKER] Process starting...');
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { runEnterpriseScan, ScanOptions } from './scanner';
