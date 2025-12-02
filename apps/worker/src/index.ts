@@ -21,13 +21,26 @@ if (redisUrl) {
   console.log(`[WORKER] Connecting to Redis using host: ${process.env.REDIS_HOST || 'localhost'}, port: ${process.env.REDIS_PORT || 6379}`);
 }
 
-const connection = process.env.REDIS_URL
-  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
-  : new IORedis({
+// connect to Redis
+let redisConfig: any;
+const redisUrl = process.env.REDIS_URL;
+
+if (redisUrl && !redisUrl.startsWith('/')) {
+  console.log(`[WORKER] Connecting to Redis using REDIS_URL (length: ${redisUrl.length})`);
+  redisConfig = redisUrl;
+} else {
+  if (redisUrl) {
+    console.warn(`[WORKER] REDIS_URL is invalid (starts with '/'), falling back to host/port config.`);
+  }
+  console.log(`[WORKER] Connecting to Redis using host: ${process.env.REDIS_HOST || 'localhost'}, port: ${process.env.REDIS_PORT || 6379}`);
+  redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
     port: Number(process.env.REDIS_PORT || 6379),
     maxRetriesPerRequest: null
-  });
+  };
+}
+
+const connection = new IORedis(redisConfig, { maxRetriesPerRequest: null });
 
 // Create dummy HTTP server for Render Health Checks (Free Tier Requirement)
 const port = process.env.PORT || 3002;
