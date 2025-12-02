@@ -12,11 +12,14 @@ const prisma = new PrismaClient();
 import http from 'http';
 
 // connect to Redis
-const connection = new IORedis(process.env.REDIS_URL || {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT || 6379),
-  maxRetriesPerRequest: null
-});
+// connect to Redis
+const connection = process.env.REDIS_URL
+  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+  : new IORedis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT || 6379),
+    maxRetriesPerRequest: null
+  });
 
 // Create dummy HTTP server for Render Health Checks (Free Tier Requirement)
 const port = process.env.PORT || 3002;
