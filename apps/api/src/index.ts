@@ -23,7 +23,7 @@ const io = new SocketIOServer(httpServer, {
 });
 
 app.use(express.json({ limit: '10mb' }));
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || 'http://localhost:3000').replace(/\/$/, '');
 app.use(cors({
     origin: FRONTEND_ORIGIN,
     methods: ['GET', 'POST', 'OPTIONS'],
