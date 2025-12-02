@@ -99,7 +99,7 @@ export default function EnterprisePlatform() {
                             <div className="min-h-screen flex flex-col justify-center items-center text-center px-6 pt-20 pb-40">
                                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-mono mb-8 animate-pulse">
                                     <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                    MILITARY-GRADE CYBER WARFARE ENGINE
+                                    ENTERPRISE SECURITY INTELLIGENCE PLATFORM
                                 </div>
                                 <h1 className="text-7xl md:text-9xl font-bold text-white tracking-tighter mb-8 leading-tight drop-shadow-2xl">
                                     Security <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-500 to-teal-600">Evolved.</span>
