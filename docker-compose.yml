@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # 1. Main Database (Postgres 15)
+  postgres:
+    image: postgres:15-alpine
+    container_name: enterprise_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: enterprise_password_secure
+      POSTGRES_DB: security_platform_v2
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_v2:/var/lib/postgresql/data
+
+  # 2. Message Broker & Cache (Redis 7)
+  redis:
+    image: redis:7-alpine
+    container_name: enterprise_queue
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+
+  # 3. Object Storage (MinIO - S3 Compatible)
+  # Critical for storing PDF reports and Evidence screenshots securely
+  minio:
+    image: minio/minio
+    container_name: enterprise_storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: enterprise_password_secure
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data_v2:/data
+
+volumes:
+  pgdata_v2:
+  minio_data_v2:

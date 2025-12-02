@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://admin:enterprise_password_secure@localhost:5432/security_platform_v2?schema=public"
+}
+
+// --- 1. RBAC & TENANCY (Requirement #1) ---
+enum Role {
+  USER
+  ADMIN
+  AUDITOR
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String?
+  role          Role      @default(USER)
+  organization  String?   // For Multi-tenancy (Team A vs Team B)
+  createdAt     DateTime  @default(now())
+  
+  jobs          Job[]
+  auditLogs     AuditLog[]
+}
+
+// --- 2. THE JOB ENGINE ---
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Job {
+  id            String    @id @default(uuid())
+  userId        String
+  
+  // Target Info
+  target        String    // e.g. "example.com"
+  scope         Json      // Config for subdomains, excluded paths
+  
+  // Execution Config
+  status        JobStatus @default(QUEUED)
+  scanProfile   String    @default("balanced") // stealth, aggressive, compliance
+  authHeader    String?   // Cookie or Bearer token (Stored encrypted in logic layer)
+  
+  // Results
+  findings      Finding[]
+  reportUrl     String?   // S3 Path to PDF
+  riskScore     Int?      // 0-100 Score
+  
+  // Metrics (Requirement #15)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  executionLogs String?   // Stored terminal logs for replay
+  
+  // Advanced Options (synchronized with Worker schema)
+  options         Json?     // { aggressive, destructive, maxBulkTargets }
+  errorMessage    String?   @db.Text
+  consentDocument String?   // path or URL to signed SoW / consent
+  
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+}
+
+// --- 3. VULNERABILITY DATA (OWASP/CVSS) ---
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+model Finding {
+  id            String    @id @default(uuid())
+  jobId         String
+  
+  title         String
+  description   String
+  severity      Severity
+  evidence      String    // Raw HTTP request/response
+  remediation   String
+  
+  // Compliance Tags (Requirement #8)
+  cveId         String?   // e.g. "CVE-2021-44228"
+  owaspCategory String?   // e.g. "A01:2021-Broken Access Control"
+  pciDss        String?   // e.g. "Requirement 6.5.1"
+  
+  job           Job       @relation(fields: [jobId], references: [id])
+}
+
+// --- 4. AUDIT & COMPLIANCE (Requirement #12) ---
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String   // e.g. "STARTED_SCAN", "EXPORTED_REPORT", "DELETED_JOB"
+  ipAddress String?
+  details   Json?
+  timestamp DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id])
+}

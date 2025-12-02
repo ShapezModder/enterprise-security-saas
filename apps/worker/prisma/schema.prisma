@@ -1,0 +1,88 @@
+generator client { 
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://admin:enterprise_password_secure@localhost:5432/security_platform_v2?schema=public"
+}
+
+enum Role {
+  USER
+  ADMIN
+  AUDITOR
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String?
+  role          Role      @default(USER)
+  organization  String?
+  createdAt     DateTime  @default(now())
+  jobs          Job[]
+  auditLogs     AuditLog[]
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Job {
+  id              String    @id @default(uuid())
+  userId          String
+  target          String
+  scope           Json
+  status          JobStatus @default(QUEUED)
+  scanProfile     String    @default("balanced")
+  authHeader      String?
+  findings        Finding[]
+  reportUrl       String?
+  riskScore       Int?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  executionLogs   String?
+  // NEW OPTIONAL FIELDS (non-breaking)
+  options         Json?     // { aggressive, destructive, maxBulkTargets }
+  errorMessage    String?   @db.Text
+  consentDocument String?   // path or URL to signed SoW / consent
+  user            User      @relation(fields: [userId], references: [id])
+  createdAt       DateTime  @default(now())
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+model Finding {
+  id            String    @id @default(uuid())
+  jobId         String
+  title         String
+  description   String
+  severity      Severity
+  evidence      String
+  remediation   String
+  cveId         String?
+  owaspCategory String?
+  pciDss        String?
+  job           Job       @relation(fields: [jobId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  ipAddress String?
+  details   Json?
+  timestamp DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
