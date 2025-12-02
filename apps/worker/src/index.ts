@@ -13,13 +13,7 @@ const prisma = new PrismaClient();
 import http from 'http';
 
 // connect to Redis
-// connect to Redis
-const redisUrl = process.env.REDIS_URL;
-if (redisUrl) {
-  console.log(`[WORKER] Connecting to Redis using REDIS_URL (length: ${redisUrl.length})`);
-} else {
-  console.log(`[WORKER] Connecting to Redis using host: ${process.env.REDIS_HOST || 'localhost'}, port: ${process.env.REDIS_PORT || 6379}`);
-}
+
 
 // connect to Redis
 let redisConfig: any;
