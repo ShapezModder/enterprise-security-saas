@@ -345,35 +345,50 @@ export async function runBusinessLogicTesting(
 ): Promise<void> {
     log('[STAGE 14] Business Logic Flaw Testing...');
 
-    // Test for race conditions
+    // Test for race conditions using native Node.js parallel requests
     log('[BUSINESS LOGIC] Testing for race conditions...');
-    const raceTestFile = path.join(OUTPUT_DIR, `race-test-${jobId}.sh`);
-    const raceScript = `#!/bin/bash
-for i in {1..10}; do
-  curl -s -X POST "${targetUrl}" -H "Content-Type: application/json" -d '{"amount": -100}' &
-done
-wait`;
-    fs.writeFileSync(raceTestFile, raceScript);
-    fs.chmodSync(raceTestFile, '755');
 
     try {
-        const raceOutput = await runCommand(`bash "${raceTestFile}"`);
-        // Only create finding if we detect actual race condition indicators
-        if (raceOutput.includes('success') && raceOutput.split('success').length > 5) {
+        // Create 10 parallel requests using Promise.all instead of bash script
+        const racePayload = JSON.stringify({ amount: -100 });
+        const raceRequests = Array.from({ length: 10 }, async () => {
+            try {
+                let curlCmd = `curl -s -X POST "${targetUrl}" -H "Content-Type: application/json" -d '${racePayload}'`;
+                if (authHeader) curlCmd += ` -H "${authHeader}"`;
+                return await runCommand(curlCmd);
+            } catch (e) {
+                return '';
+            }
+        });
+
+        // Execute all requests in parallel with a timeout
+        const raceResults = await Promise.race([
+            Promise.all(raceRequests),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Race test timeout')), 10000))
+        ]) as string[];
+
+        // Check if multiple requests succeeded (potential race condition)
+        const successCount = raceResults.filter(r =>
+            r.includes('success') || r.includes('200') || r.includes('OK')
+        ).length;
+
+        if (successCount > 5) {
             await saveFinding(
                 jobId,
                 'Business Logic',
                 'Potential Race Condition Vulnerability',
                 'MEDIUM',
                 'Application may be vulnerable to race conditions in concurrent requests.',
-                'Multiple concurrent requests sent to test for race conditions',
+                `${successCount} out of 10 concurrent requests succeeded`,
                 'Implement proper transaction locking and atomic operations.',
                 undefined,
                 undefined,
                 'A04:2021-Insecure Design'
             );
         }
-    } catch { }
+    } catch (e) {
+        log(`[WARN] Race condition test failed or timed out: ${String(e)}`);
+    }
 
     // Test for negative quantity exploits
     const negativePayloads = [
