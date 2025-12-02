@@ -213,7 +213,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         if (typeof window === 'undefined') return;
 
         const io = require('socket.io-client');
-        const newSocket = io('http://localhost:3001');
+        const apiBaseUrl = API_URL.replace('/api', '');
+        const newSocket = io(apiBaseUrl);
 
         newSocket.on('connect', () => console.log('[SOCKET.IO] Connected'));
         newSocket.on('scan_log', (data: { jobId: string; log: string }) => {
@@ -228,7 +229,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
     const fetchJobs = async () => {
         try {
-            const res = await axios.get('http://localhost:3001/api/admin/jobs');
+            const res = await axios.get(`${API_URL}/admin/jobs`);
             setJobs(res.data.jobs || []);
         } catch (e) {
             console.error('Failed to fetch jobs:', e);
@@ -237,7 +238,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
     const startJob = async (jobId: string) => {
         try {
-            await axios.post('http://localhost:3001/api/admin/start-job', { jobId });
+            await axios.post(`${API_URL}/admin/start-job`, { jobId });
             setActiveTerminalJob(jobId);
             setTerminalLogs([`[SYSTEM] Starting job ${jobId}...`]);
             fetchJobs();
