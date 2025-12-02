@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://admin:enterprise_password_secure@localhost:5432/security_platform_v2?schema=public"
+  url      = env("DATABASE_URL")
 }
 
 // --- 1. RBAC & TENANCY (Requirement #1) ---
