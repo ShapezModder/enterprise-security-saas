@@ -9,11 +9,23 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 
+import http from 'http';
+
 // connect to Redis
-const connection = new IORedis({
+const connection = new IORedis(process.env.REDIS_URL || {
   host: process.env.REDIS_HOST || 'localhost',
   port: Number(process.env.REDIS_PORT || 6379),
   maxRetriesPerRequest: null
+});
+
+// Create dummy HTTP server for Render Health Checks (Free Tier Requirement)
+const port = process.env.PORT || 3002;
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Worker is running');
+});
+server.listen(port, () => {
+  console.log(`[WORKER] Health check server listening on port ${port}`);
 });
 
 console.log("👷 WORKER: Online & waiting for scan jobs...");
@@ -93,8 +105,8 @@ const worker = new Worker(
 // graceful shutdown
 async function shutdown() {
   console.log("[WORKER] Shutting down...");
-  try { await worker.close(); } catch {}
-  try { await prisma.$disconnect(); } catch {}
+  try { await worker.close(); } catch { }
+  try { await prisma.$disconnect(); } catch { }
   process.exit(0);
 }
 
