@@ -30,7 +30,7 @@ export default function EnterprisePlatform() {
     // Admin State
     const [adminPass, setAdminPass] = useState("");
 
-    const handleLogin = () => { if (adminPass === "admin123") setView("admin"); else alert("ACCESS DENIED"); };
+    const handleLogin = () => { if (adminPass === "anupmeena") setView("admin"); else alert("ACCESS DENIED"); };
 
     const submitJob = async () => {
         setLoading(true);
