@@ -203,6 +203,34 @@ app.post('/api/admin/start-job', async (req: Request, res: Response) => {
                 options: updatedOptions
             });
             console.log(`[API] Job ${jobId} started with ${selectedStages?.length || 'all'} stages, destructive: ${updatedOptions.destructive}`);
+
+            // Wake up the worker if it's sleeping on Render free tier
+            const workerUrl = process.env.WORKER_URL;
+            if (workerUrl) {
+                Promise.resolve().then(async () => {
+                    try {
+                        const https = require('https');
+                        const http = require('http');
+                        const url = new URL(`${workerUrl}/wake`);
+                        const protocol = url.protocol === 'https:' ? https : http;
+
+                        await new Promise<void>((resolve, reject) => {
+                            const req = protocol.get(url.toString(), { timeout: 5000 }, (res: any) => {
+                                res.on('data', () => { });
+                                res.on('end', () => resolve());
+                            });
+                            req.on('error', reject);
+                            req.on('timeout', () => {
+                                req.destroy();
+                                reject(new Error('Request timeout'));
+                            });
+                        });
+                        console.log('[API] Worker wake-up ping sent successfully');
+                    } catch (wakeError) {
+                        console.warn('[API] Worker wake-up ping failed (worker may already be awake):', (wakeError as any)?.message);
+                    }
+                }).catch(() => { });
+            }
         } else {
             return res.status(500).json({ error: 'Queue not available' });
         }
