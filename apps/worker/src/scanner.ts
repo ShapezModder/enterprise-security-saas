@@ -280,11 +280,16 @@ export const runEnterpriseScan = async (
     let crawlData = '';
     try {
         const crawlFile = path.join(OUTPUT_DIR, `crawl-${jobId}.txt`);
-        await runCommand(`katana -u ${targetUrl} -d ${aggressive ? 5 : 3} -o ${crawlFile} -silent`);
+        // Reduced depth and added timeout to prevent hanging
+        const depth = aggressive ? 3 : 2; // Reduced from 5/3 to 3/2
+        await runCommand(`katana -u ${targetUrl} -d ${depth} -o ${crawlFile} -silent -timeout 60`);
         crawlData = safeReadFile(crawlFile);
-        log(`[CRAWL] Discovered ${crawlData.split('\\n').length} URLs`, jobId);
+        const urlCount = crawlData.split('\\n').filter(u => u.trim()).length;
+        log(`[CRAWL] Discovered ${urlCount} URLs`, jobId);
     } catch (e) {
-        log(`[WARN] Katana failed: ${String(e)}`, jobId);
+        log(`[WARN] Katana failed or timed out: ${String(e)}`, jobId);
+        log('[INFO] Continuing scan without crawl data', jobId);
+        crawlData = '';
     }
 
     // --- STAGE 4: DIRECTORY FUZZING ---
