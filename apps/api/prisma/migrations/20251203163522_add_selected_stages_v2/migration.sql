@@ -1,4 +1,4 @@
--- AlterTable (idempotent - won't fail if column exists)
+-- AlterTable (idempotent version)
 DO $$ 
 BEGIN
     IF NOT EXISTS (
