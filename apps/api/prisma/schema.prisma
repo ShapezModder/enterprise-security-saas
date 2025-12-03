@@ -34,6 +34,7 @@ enum JobStatus {
   COMPLETED
   FAILED
   CANCELLED
+  DECLINED
 }
 
 model Job {

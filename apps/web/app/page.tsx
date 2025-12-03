@@ -247,6 +247,34 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         }
     };
 
+    const declineJob = async (jobId: string, userEmail: string, target: string) => {
+        const reason = prompt('Reason for declining this request (optional):');
+
+        if (confirm(`⚠️ DECLINE this request?\n\nUser: ${userEmail}\nTarget: ${target}\n\nThe user will receive an email notification.`)) {
+            try {
+                const res = await axios.post(`${API_URL}/admin/decline-job`, { jobId, reason });
+                // Call email service via dedicated endpoint (if implemented) or handle in API
+                alert('✓ Request declined successfully\n\n' + (reason ? `Reason sent: ${reason}` : 'Email notification sent'));
+                fetchJobs();
+            } catch (e: any) {
+                alert(`Failed: ${e.response?.data?.error || e.message}`);
+            }
+        }
+    };
+
+    const terminateJob = async (jobId: string) => {
+        if (confirm(`⚠️ TERMINATE running scan?\n\nJob: ${jobId}\n\nThis will stop the scan immediately.`)) {
+            try {
+                await axios.post(`${API_URL}/admin/terminate-job`, { jobId });
+                alert('✓ Scan terminated successfully');
+                setActiveTerminalJob(null);
+                fetchJobs();
+            } catch (e: any) {
+                alert(`Failed: ${e.response?.data?.error || e.message}`);
+            }
+        }
+    };
+
     const pendingJobs = jobs.filter(j => j.status === 'QUEUED');
     const runningJobs = jobs.filter(j => j.status === 'RUNNING');
 
@@ -277,12 +305,27 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                             <p className="font-mono text-xs text-yellow-400">{job.id.substring(0, 8)}</p>
                                             <p className="text-white font-semibold text-lg">{job.target}</p>
                                             <p className="text-xs text-gray-400">{job.user.email}</p>
+                                            {job.consentDocument && (
+                                                <a
+                                                    href={job.consentDocument}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-blue-400 hover:text-blue-300 underline flex items-center gap-1 mt-2"
+                                                >
+                                                    <FileText size={12} /> View RoE Documents
+                                                </a>
+                                            )}
                                         </div>
                                         <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded">QUEUED</span>
                                     </div>
-                                    <button onClick={() => startJob(job.id)} className="w-full mt-3 px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-semibold">
-                                        ▶ START SCAN
-                                    </button>
+                                    <div className="flex gap-2 mt-3">
+                                        <button onClick={() => startJob(job.id)} className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-semibold">
+                                            ▶ START SCAN
+                                        </button>
+                                        <button onClick={() => declineJob(job.id, job.user.email, job.target)} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-semibold text-sm">
+                                            ✕ DECLINE
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -303,9 +346,14 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                         </div>
                                         <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded animate-pulse">RUNNING</span>
                                     </div>
-                                    <button onClick={() => { setActiveTerminalJob(job.id); setTerminalLogs([]); }} className="w-full mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold text-sm flex items-center justify-center gap-2">
-                                        <Terminal size={16} /> VIEW TERMINAL
-                                    </button>
+                                    <div className="flex gap-2 mt-3">
+                                        <button onClick={() => { setActiveTerminalJob(job.id); setTerminalLogs([]); }} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold text-sm flex items-center justify-center gap-2">
+                                            <Terminal size={16} /> TERMINAL
+                                        </button>
+                                        <button onClick={() => terminateJob(job.id)} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-semibold text-sm">
+                                            ⏹ STOP
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>

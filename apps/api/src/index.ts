@@ -212,9 +212,87 @@ app.get('/api/admin/jobs', async (req: Request, res: Response) => {
         });
 
         return res.json({ jobs });
+    });
+
+// NEW: Admin endpoint to decline a pending job
+app.post('/api/admin/decline-job', async (req: Request, res: Response) => {
+    try {
+        const { jobId, reason } = req.body;
+
+        if (!jobId) {
+            return res.status(400).json({ error: 'jobId required' });
+        }
+
+        const job = await prisma.job.findUnique({
+            where: { id: jobId },
+            include: { user: true }
+        });
+
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+
+        if (job.status !== 'QUEUED') {
+            return res.status(400).json({ error: `Job is already ${job.status}` });
+        }
+
+        // Update job status to DECLINED
+        await prisma.job.update({
+            where: { id: jobId },
+            data: {
+                status: 'DECLINED',
+                errorMessage: reason || 'Request declined by administrator'
+            }
+        });
+
+        console.log(`[API] Job ${jobId} declined by admin. Notifying user...`);
+
+        // Note: Email sending will be handled by importing from worker (see implementation notes)
+        // For now, we log that it should be sent
+        console.log(`[API] TODO: Send decline email to ${job.user.email}`);
+
+        return res.json({ success: true, message: 'Job declined successfully', userEmail: job.user.email, target: job.target, reason });
     } catch (e: any) {
         console.error('[API ERROR]', e);
-        return res.status(500).json({ error: 'Failed to fetch jobs' });
+        return res.status(500).json({ error: 'Failed to decline job' });
+    }
+});
+
+// NEW: Admin endpoint to terminate a running job
+app.post('/api/admin/terminate-job', async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.body;
+
+        if (!jobId) {
+            return res.status(400).json({ error: 'jobId required' });
+        }
+
+        const job = await prisma.job.findUnique({ where: { id: jobId } });
+
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+
+        if (job.status !== 'RUNNING') {
+            return res.status(400).json({ error: `Job is not running (status: ${job.status})` });
+        }
+
+        // Update status to CANCELLED (worker will detect this and stop)
+        await prisma.job.update({
+            where: { id: jobId },
+            data: {
+                status: 'CANCELLED',
+                completedAt: new Date(),
+                errorMessage: 'Terminated by administrator'
+            }
+        });
+
+        console.log(`[API] Job ${jobId} terminated by admin`);
+
+        return res.json({ success: true, message: 'Job terminated successfully' });
+    } catch (e: any) {
+        console.error('[API ERROR]', e);
+        return res.status(500).json({ error: 'Failed to terminate job' });
     }
 });
 
