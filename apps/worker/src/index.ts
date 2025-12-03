@@ -19,14 +19,16 @@ import http from 'http';
 let redisConfig: any;
 const redisUrl = process.env.REDIS_URL;
 
-if (redisUrl && !redisUrl.startsWith('/')) {
-  console.log(`[WORKER] Connecting to Redis using REDIS_URL (length: ${redisUrl.length})`);
+if (redisUrl && redisUrl.startsWith('redis')) {
+  console.log(`[WORKER] Connecting to Redis using REDIS_URL`);
   redisConfig = redisUrl;
 } else {
+  console.error('[WORKER] ✗ REDIS_URL not found or invalid!');
+  console.error('[WORKER] Please set REDIS_URL environment variable');
   if (redisUrl) {
-    console.warn(`[WORKER] REDIS_URL is invalid (starts with '/'), falling back to host/port config.`);
+    console.warn(`[WORKER] REDIS_URL is invalid (value: "${redisUrl.substring(0, 20)}..."), falling back to host/port config.`);
   }
-  console.log(`[WORKER] Connecting to Redis using host: ${process.env.REDIS_HOST || 'localhost'}, port: ${process.env.REDIS_PORT || 6379}`);
+  console.log(`[WORKER] Using fallback: ${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`);
   redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
     port: Number(process.env.REDIS_PORT || 6379),
@@ -34,9 +36,13 @@ if (redisUrl && !redisUrl.startsWith('/')) {
   };
 }
 
-const connection = new IORedis(redisConfig, { maxRetriesPerRequest: null });
+const connection = new IORedis(redisConfig, {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+  lazyConnect: false
+});
 connection.on('error', (err) => {
-  console.error('[WORKER] Redis Connection Error:', err);
+  console.error('[WORKER] Redis Connection Error:', err.message || err);
 });
 
 // Create dummy HTTP server for Render Health Checks (Free Tier Requirement)

@@ -345,27 +345,26 @@ export async function runBusinessLogicTesting(
 ): Promise<void> {
     log('[STAGE 14] Business Logic Flaw Testing...');
 
-    // Test for race conditions using native Node.js parallel requests
+    // Test for race conditions using simplified parallel requests
     log('[BUSINESS LOGIC] Testing for race conditions...');
 
     try {
-        // Create 10 parallel requests using Promise.all instead of bash script
         const racePayload = JSON.stringify({ amount: -100 });
-        const raceRequests = Array.from({ length: 10 }, async () => {
+
+        // Simplified approach: Create promises with individual timeouts
+        const createRequest = async () => {
             try {
-                let curlCmd = `curl -s -X POST "${targetUrl}" -H "Content-Type: application/json" -d '${racePayload}'`;
+                let curlCmd = `curl -s -m 5 -X POST "${targetUrl}" -H "Content-Type: application/json" -d '${racePayload}'`;
                 if (authHeader) curlCmd += ` -H "${authHeader}"`;
                 return await runCommand(curlCmd);
             } catch (e) {
                 return '';
             }
-        });
+        };
 
-        // Execute all requests in parallel with a timeout
-        const raceResults = await Promise.race([
-            Promise.all(raceRequests),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Race test timeout')), 10000))
-        ]) as string[];
+        // Execute 10 concurrent requests with Promise.all (simpler than Promise.race)
+        const raceRequests = Array.from({ length: 10 }, () => createRequest());
+        const raceResults = await Promise.all(raceRequests);
 
         // Check if multiple requests succeeded (potential race condition)
         const successCount = raceResults.filter(r =>
@@ -387,7 +386,7 @@ export async function runBusinessLogicTesting(
             );
         }
     } catch (e) {
-        log(`[WARN] Race condition test failed or timed out: ${String(e)}`);
+        log(`[WARN] Race condition test failed: ${String(e)}`);
     }
 
     // Test for negative quantity exploits

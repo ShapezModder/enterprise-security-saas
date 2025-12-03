@@ -32,10 +32,23 @@ if (apiUrl.startsWith('/') && !apiUrl.startsWith('//')) {
     apiUrl = 'http://localhost:3001';
 }
 
-const socket = ioClient(apiUrl);
+const socket = ioClient(apiUrl, {
+    transports: ['polling'], // Force polling only to bypass Cloudflare
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 10000,
+    timeout: 20000
+});
 
+let lastErrorLog = 0;
 socket.on('connect_error', (err) => {
-    console.error(`[SCANNER] Socket.IO Connection Error (URL: ${apiUrl}):`, err);
+    // Rate-limited error logging (once per minute) to avoid spam
+    const now = Date.now();
+    if (!lastErrorLog || now - lastErrorLog > 60000) {
+        console.error(`[SCANNER] Socket.IO Connection Error (URL: ${apiUrl}):`, err.message || err);
+        lastErrorLog = now;
+    }
 });
 
 socket.on('connect', () => {

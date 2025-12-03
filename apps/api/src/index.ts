@@ -14,12 +14,19 @@ const prisma = new PrismaClient();
 const app = express();
 const httpServer = createServer(app);
 
-// Socket.IO setup for live logs
+// Socket.IO setup for live logs with Cloudflare compatibility
 const io = new SocketIOServer(httpServer, {
     cors: {
         origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
-        methods: ['GET', 'POST']
-    }
+        methods: ['GET', 'POST'],
+        credentials: true
+    },
+    // CRITICAL: Use polling first to bypass Cloudflare WebSocket challenges
+    transports: ['polling', 'websocket'],
+    allowEIO3: true,
+    // Increase timeouts for slow/free-tier connections
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 app.use(express.json({ limit: '10mb' }));
@@ -42,16 +49,26 @@ let redisConnection: any = null;
     try {
         if (REDIS_URL && REDIS_URL.startsWith('redis')) {
             console.log('[API] Connecting to Redis using REDIS_URL');
-            redisConnection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+            redisConnection = new IORedis(REDIS_URL, {
+                maxRetriesPerRequest: null,
+                enableReadyCheck: false, // Required for Upstash compatibility
+                lazyConnect: false
+            });
         } else {
             console.log(`[API] Connecting to Redis using host: ${REDIS_HOST}:${REDIS_PORT}`);
-            redisConnection = new IORedis({ host: REDIS_HOST, port: REDIS_PORT, maxRetriesPerRequest: null });
+            redisConnection = new IORedis({
+                host: REDIS_HOST,
+                port: REDIS_PORT,
+                maxRetriesPerRequest: null,
+                enableReadyCheck: false
+            });
         }
         await redisConnection.ping();
         queue = new Queue('enterprise-scan-queue', { connection: redisConnection });
-        console.log('[API] Connected to Redis and Bull queue is ready');
+        console.log('[API] ✓ Connected to Redis and Bull queue is ready');
     } catch (e) {
-        console.warn('[API] Redis not available; jobs will still be persisted to DB but not enqueued automatically.', String(e));
+        console.error('[API] ✗ Redis connection failed:', String(e));
+        console.error('[API] Jobs will be persisted to DB but NOT enqueued for processing');
         queue = null;
     }
 })();
