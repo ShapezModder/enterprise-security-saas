@@ -11,24 +11,11 @@ const FROM_EMAIL = 'onboarding@resend.dev'; // Default Resend testing domain
 const resend = new Resend(RESEND_API_KEY);
 
 export async function sendReportEmail(
-    recipientEmail: string,
-    jobId: string,
-    target: string,
-    pdfPath: string
-) {
-    // ALWAYS send to operator email for manual distribution
-    const OPERATOR_EMAIL = 'adirajput362@gmail.com';
-
-    console.log(`[EMAIL] Sending report to operator: ${OPERATOR_EMAIL}`);
-    console.log(`[EMAIL] Customer email (for manual forwarding): ${recipientEmail}`);
-
-    if (!RESEND_API_KEY) {
-        console.error('[EMAIL] RESEND_API_KEY is missing');
         throw new Error('RESEND_API_KEY is missing');
     }
 
-    // Email content with customer info highlighted
-    const htmlContent = `
+// Email content with customer info highlighted
+const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 32px;">FORTRESS.ai</h1>
@@ -89,45 +76,45 @@ export async function sendReportEmail(
             </div>
         `;
 
-    // Send email
-    try {
-        // Read PDF file
-        const pdfBuffer = fs.readFileSync(pdfPath);
+// Send email
+try {
+    // Read PDF file
+    const pdfBuffer = fs.readFileSync(pdfPath);
 
-        const { data, error } = await resend.emails.send({
-            from: `FORTRESS.ai Security <${FROM_EMAIL}>`,
-            to: OPERATOR_EMAIL, // Send to operator, not customer
-            subject: `[MANUAL DISTRIBUTION] Security Report - ${target}`,
-            html: htmlContent,
-            attachments: [
-                {
-                    filename: `Security_Report_${jobId}.pdf`,
-                    content: pdfBuffer
-                }
-            ]
-        });
+    const { data, error } = await resend.emails.send({
+        from: `FORTRESS.ai Security <${FROM_EMAIL}>`,
+        to: OPERATOR_EMAIL, // Send to operator, not customer
+        subject: `[MANUAL DISTRIBUTION] Security Report - ${target}`,
+        html: htmlContent,
+        attachments: [
+            {
+                filename: `Security_Report_${jobId}.pdf`,
+                content: pdfBuffer
+            }
+        ]
+    });
 
-        if (error) {
-            console.error('[EMAIL] Resend API Error:', error);
-            throw new Error(error.message);
-        }
-
-        console.log(`[EMAIL] Report sent successfully to ${recipientEmail}`);
-        console.log(`[EMAIL] Message ID: ${data?.id}`);
-
-        // Delete PDF after sending to save storage
-        try {
-            fs.unlinkSync(pdfPath);
-            console.log(`[EMAIL] Deleted PDF file to save storage: ${pdfPath}`);
-        } catch (e) {
-            console.warn(`[EMAIL] Could not delete PDF: ${e}`);
-        }
-
-        return true;
-    } catch (error) {
-        console.error(`[EMAIL] Failed to send report:`, error);
-        throw error;
+    if (error) {
+        console.error('[EMAIL] Resend API Error:', error);
+        throw new Error(error.message);
     }
+
+    console.log(`[EMAIL] Report sent successfully to ${recipientEmail}`);
+    console.log(`[EMAIL] Message ID: ${data?.id}`);
+
+    // Delete PDF after sending to save storage
+    try {
+        fs.unlinkSync(pdfPath);
+        console.log(`[EMAIL] Deleted PDF file to save storage: ${pdfPath}`);
+    } catch (e) {
+        console.warn(`[EMAIL] Could not delete PDF: ${e}`);
+    }
+
+    return true;
+} catch (error) {
+    console.error(`[EMAIL] Failed to send report:`, error);
+    throw error;
+}
 }
 
 export async function sendDeclineEmail(
