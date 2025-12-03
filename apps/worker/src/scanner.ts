@@ -236,28 +236,56 @@ export const runEnterpriseScan = async (
 
     const targetUrl = primaryDomain.startsWith('http') ? primaryDomain : `https://${primaryDomain}`;
 
+    // Fetch job to get selected stages
+    const job = await prisma.job.findUnique({
+        where: { id: jobId }
+    });
+
+    const selectedStages = (job?.selectedStages as string[]) || [];
+    const runAllStages = selectedStages.length === 0;
+
+    // Helper to check if stage should run
+    const shouldRun = (stageId: string) => {
+        if (runAllStages) return true;
+        return selectedStages.includes(stageId);
+    };
+
+    if (runAllStages) {
+        log('[CONFIG] Running ALL stages (no selection made)', jobId);
+    } else {
+        log(`[CONFIG] Running ${selectedStages.length} selected stages: ${selectedStages.join(', ')}`, jobId);
+    }
+
     // --- STAGE 0: WAF FINGERPRINTING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 0] WAF Fingerprinting (wafw00f)...', jobId);
-    try {
-        const wafOut = await runCommand(`wafw00f ${targetUrl}`);
-        if (wafOut.toLowerCase().includes('cloudflare') || wafOut.toLowerCase().includes('akamai')) {
-            await saveFinding(jobId, 'WAF', 'WAF Detected', 'info', `WAF detected: ${wafOut.substring(0, 200)}`, wafOut.substring(0, 500), 'WAF is active. Adjust scan intensity accordingly.');
+    if (shouldRun('waf-detection')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 0] WAF Fingerprinting (wafw00f)...', jobId);
+        try {
+            const wafOut = await runCommand(`wafw00f ${targetUrl}`);
+            if (wafOut.toLowerCase().includes('cloudflare') || wafOut.toLowerCase().includes('akamai')) {
+                await saveFinding(jobId, 'WAF', 'WAF Detected', 'info', `WAF detected: ${wafOut.substring(0, 200)}`, wafOut.substring(0, 500), 'WAF is active. Adjust scan intensity accordingly.');
+            }
+        } catch (e) {
+            log(`[WARN] WAF scan failed: ${String(e)}`, jobId);
         }
-    } catch (e) {
-        log(`[WARN] WAF scan failed: ${String(e)}`, jobId);
+    } else {
+        log('[STAGE 0] WAF Detection - SKIPPED', jobId);
     }
 
     // --- STAGE 1: TECH STACK DETECTION ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 1] Tech Stack Detection (WhatWeb)...', jobId);
-    try {
-        const wwOut = await runCommand(`whatweb ${targetUrl}`);
-        if (wwOut) {
-            await saveFinding(jobId, 'Recon', 'Technology Stack', 'info', `Detected technologies: ${wwOut.substring(0, 300)}`, wwOut.substring(0, 1000), 'Review exposed technology versions for known vulnerabilities.');
+    if (shouldRun('tech-stack')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 1] Tech Stack Detection (WhatWeb)...', jobId);
+        try {
+            const wwOut = await runCommand(`whatweb ${targetUrl}`);
+            if (wwOut) {
+                await saveFinding(jobId, 'Recon', 'Technology Stack', 'info', `Detected technologies: ${wwOut.substring(0, 300)}`, wwOut.substring(0, 1000), 'Review exposed technology versions for known vulnerabilities.');
+            }
+        } catch (e) {
+            log(`[WARN] WhatWeb scan failed: ${String(e)}`, jobId);
         }
-    } catch (e) {
-        log(`[WARN] WhatWeb scan failed: ${String(e)}`, jobId);
+    } else {
+        log('[STAGE 1] Tech Stack Detection - SKIPPED', jobId);
     }
 
     // --- STAGE 2: SUBDOMAIN ENUMERATION ---
