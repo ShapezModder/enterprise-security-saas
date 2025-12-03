@@ -289,6 +289,7 @@ export const runEnterpriseScan = async (
     }
 
     // --- STAGE 2: SUBDOMAIN ENUMERATION ---
+    let subdomains: string[] = [];
     if (shouldRun('subdomain-enum')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 2] Subdomain Enumeration (subfinder)...', jobId);
@@ -306,6 +307,7 @@ export const runEnterpriseScan = async (
     }
 
     // --- STAGE 3: DEEP WEB CRAWLING ---
+    let crawlData = '';
     if (shouldRun('web-crawling')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 3] Deep Web Crawling (Katana)...', jobId);
