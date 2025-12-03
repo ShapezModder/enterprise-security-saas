@@ -289,35 +289,41 @@ export const runEnterpriseScan = async (
     }
 
     // --- STAGE 2: SUBDOMAIN ENUMERATION ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 2] Subdomain Enumeration (subfinder)...', jobId);
-    let subdomains: string[] = [];
-    try {
-        const subFile = path.join(OUTPUT_DIR, `subdomains-${jobId}.txt`);
-        await runCommand(`subfinder -d ${primaryDomain} -o ${subFile} -silent`);
-        const subData = safeReadFile(subFile);
-        subdomains = subData.split('\\n').filter(s => s.trim());
-        log(`[RECON] Found ${subdomains.length} subdomains`, jobId);
-    } catch (e) {
-        log(`[WARN] Subfinder failed: ${String(e)}`, jobId);
+    if (shouldRun('subdomain-enum')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 2] Subdomain Enumeration (subfinder)...', jobId);
+        try {
+            const subFile = path.join(OUTPUT_DIR, `subdomains-${jobId}.txt`);
+            await runCommand(`subfinder -d ${primaryDomain} -o ${subFile} -silent`);
+            const subData = safeReadFile(subFile);
+            subdomains = subData.split('\\n').filter(s => s.trim());
+            log(`[RECON] Found ${subdomains.length} subdomains`, jobId);
+        } catch (e) {
+            log(`[WARN] Subfinder failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 2] Subdomain Enumeration - SKIPPED', jobId);
     }
 
     // --- STAGE 3: DEEP WEB CRAWLING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 3] Deep Web Crawling (Katana)...', jobId);
-    let crawlData = '';
-    try {
-        const crawlFile = path.join(OUTPUT_DIR, `crawl-${jobId}.txt`);
-        // Reduced depth and added timeout to prevent hanging
-        const depth = aggressive ? 3 : 2; // Reduced from 5/3 to 3/2
-        await runCommand(`katana -u ${targetUrl} -d ${depth} -o ${crawlFile} -silent -timeout 60`);
-        crawlData = safeReadFile(crawlFile);
-        const urlCount = crawlData.split('\\n').filter(u => u.trim()).length;
-        log(`[CRAWL] Discovered ${urlCount} URLs`, jobId);
-    } catch (e) {
-        log(`[WARN] Katana failed or timed out: ${String(e)}`, jobId);
-        log('[INFO] Continuing scan without crawl data', jobId);
-        crawlData = '';
+    if (shouldRun('web-crawling')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 3] Deep Web Crawling (Katana)...', jobId);
+        try {
+            const crawlFile = path.join(OUTPUT_DIR, `crawl-${jobId}.txt`);
+            // Reduced depth and added timeout to prevent hanging
+            const depth = aggressive ? 3 : 2; // Reduced from 5/3 to 3/2
+            await runCommand(`katana -u ${targetUrl} -d ${depth} -o ${crawlFile} -silent -timeout 60`);
+            crawlData = safeReadFile(crawlFile);
+            const urlCount = crawlData.split('\\n').filter(u => u.trim()).length;
+            log(`[CRAWL] Discovered ${urlCount} URLs`, jobId);
+        } catch (e) {
+            log(`[WARN] Katana failed or timed out: ${String(e)}`, jobId);
+            log('[INFO] Continuing scan without crawl data', jobId);
+            crawlData = '';
+        }
+    } else {
+        log('[STAGE 3] Deep Web Crawling - SKIPPED (Katana disabled)', jobId);
     }
 
     // --- STAGE 4: DIRECTORY FUZZING ---

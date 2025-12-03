@@ -5,10 +5,14 @@ import { runEnterpriseScan, ScanOptions } from './scanner';
 import { generateReport } from './reporter';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import { startKeepAlive } from './keep-alive';
 
 dotenv.config();
 
 const prisma = new PrismaClient();
+
+// Start keep-alive to prevent worker shutdown
+startKeepAlive();
 
 import http from 'http';
 
