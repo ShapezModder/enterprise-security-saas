@@ -160,7 +160,7 @@ app.post('/api/scan', async (req: Request, res: Response) => {
 // NEW: Admin endpoint to manually start a queued job
 app.post('/api/admin/start-job', async (req: Request, res: Response) => {
     try {
-        const { jobId } = req.body;
+        const { jobId, selectedStages, destructive } = req.body;
 
         if (!jobId) {
             return res.status(400).json({ error: 'jobId required' });
@@ -176,14 +176,23 @@ app.post('/api/admin/start-job', async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Job is already ${job.status}` });
         }
 
+        // Merge options with destructive setting
+        const currentOptions = (job.options as any) || {};
+        const updatedOptions = {
+            ...currentOptions,
+            destructive: destructive ?? currentOptions.destructive ?? false
+        };
+
         // NOW queue it to BullMQ for processing
         if (queue) {
-            // Update job status to RUNNING
+            // Update job status to RUNNING and store selected stages
             await prisma.job.update({
                 where: { id: jobId },
                 data: {
                     status: 'RUNNING',
-                    startedAt: new Date()
+                    startedAt: new Date(),
+                    selectedStages: selectedStages || null,
+                    options: updatedOptions
                 }
             });
 
@@ -191,9 +200,9 @@ app.post('/api/admin/start-job', async (req: Request, res: Response) => {
                 jobId: job.id,
                 target: job.target,
                 authHeader: job.authHeader,
-                options: job.options
+                options: updatedOptions
             });
-            console.log(`[API] Job ${jobId} manually started by admin and queued to BullMQ`);
+            console.log(`[API] Job ${jobId} started with ${selectedStages?.length || 'all'} stages, destructive: ${updatedOptions.destructive}`);
         } else {
             return res.status(500).json({ error: 'Queue not available' });
         }
