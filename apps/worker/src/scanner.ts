@@ -389,7 +389,41 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] Nmap failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 7] Port Scanning - SKIPPED', jobId);
+    }
 
+    // --- STAGE 8-14: ADVANCED ATTACK VECTORS ---
+    const crawledUrls = crawlData.split('\\n').filter(u => u.trim().startsWith('http'));
+
+    // XSS Testing
+    if (shouldRun('xss-testing')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 8] XSS Testing...', jobId);
+        try {
+            await runXSSScanning(jobId, targetUrl, crawledUrls, authHeader);
+        } catch (e) {
+            log(`[WARN] XSS scanning failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 8] XSS Testing - SKIPPED', jobId);
+    }
+
+    // XXE Testing
+    if (shouldRun('xxe-testing')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 9] XXE Testing...', jobId);
+        try {
+            await runXXEScanning(jobId, targetUrl, authHeader);
+        } catch (e) {
+            log(`[WARN] XXE scanning failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 9] XXE Testing - SKIPPED', jobId);
+    }
+
+    // SSRF Testing
+    if (shouldRun('ssrf-testing')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 10] SSRF Testing...', jobId);
         try {
@@ -397,7 +431,12 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] SSRF scanning failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 10] SSRF Testing - SKIPPED', jobId);
+    }
 
+    // Deserialization Testing
+    if (shouldRun('deserialization-testing')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 11] Deserialization Testing...', jobId);
         try {
@@ -405,7 +444,12 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] Deserialization scanning failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 11] Deserialization - SKIPPED', jobId);
+    }
 
+    // Business Logic Testing
+    if (shouldRun('business-logic-testing')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 12] Business Logic Testing...', jobId);
         try {
@@ -413,7 +457,12 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] Business logic testing failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 12] Business Logic - SKIPPED', jobId);
+    }
 
+    // Cloud Security
+    if (shouldRun('cloud-security')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 13] Cloud Security Testing...', jobId);
         try {
@@ -421,7 +470,12 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] Cloud security scanning failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 13] Cloud Security - SKIPPED', jobId);
+    }
 
+    // Authentication Testing
+    if (shouldRun('auth-testing')) {
         await ensureNotCancelled(jobId);
         log('[STAGE 14] Advanced Authentication Testing...', jobId);
         try {
@@ -429,41 +483,44 @@ export const runEnterpriseScan = async (
         } catch (e) {
             log(`[WARN] Authentication testing failed: ${String(e)}`, jobId);
         }
+    } else {
+        log('[STAGE 14] Authentication Testing - SKIPPED', jobId);
+    }
 
-        // --- FINALIZE ---
-        log('[CYBER WARFARE] Assessment complete – aggregating results.', jobId);
+    // --- FINALIZE ---
+    log('[CYBER WARFARE] Assessment complete – aggregating results.', jobId);
 
-        // Generate PDF report
-        log('[REPORT] Generating comprehensive PDF report...', jobId);
-        const pdfPath = await generateReport(jobId);
+    // Generate PDF report
+    log('[REPORT] Generating comprehensive PDF report...', jobId);
+    const pdfPath = await generateReport(jobId);
 
-        if (pdfPath) {
-            log('[REPORT] PDF generated successfully', jobId);
+    if (pdfPath) {
+        log('[REPORT] PDF generated successfully', jobId);
 
-            // Get job details for email
-            const job = await prisma.job.findUnique({
-                where: { id: jobId },
-                include: { user: true }
-            });
-
-            if (job && job.user.email) {
-                try {
-                    log(`[EMAIL] Sending report to ${job.user.email}...`, jobId);
-                    await sendReportEmail(job.user.email, jobId, job.target, pdfPath);
-                    log('[EMAIL] Report sent successfully!', jobId);
-                } catch (e) {
-                    log(`[ERROR] Failed to send email: ${String(e)}`, jobId);
-                }
-            }
-        }
-
-        await prisma.job.update({
+        // Get job details for email
+        const job = await prisma.job.findUnique({
             where: { id: jobId },
-            data: {
-                status: 'COMPLETED',
-                completedAt: new Date()
-            }
+            include: { user: true }
         });
 
-        log(`[SUCCESS] Job ${jobId} completed successfully`, jobId);
-    };
+        if (job && job.user.email) {
+            try {
+                log(`[EMAIL] Sending report to ${job.user.email}...`, jobId);
+                await sendReportEmail(job.user.email, jobId, job.target, pdfPath);
+                log('[EMAIL] Report sent successfully!', jobId);
+            } catch (e) {
+                log(`[ERROR] Failed to send email: ${String(e)}`, jobId);
+            }
+        }
+    }
+
+    await prisma.job.update({
+        where: { id: jobId },
+        data: {
+            status: 'COMPLETED',
+            completedAt: new Date()
+        }
+    });
+
+    log(`[SUCCESS] Job ${jobId} completed successfully`, jobId);
+};
