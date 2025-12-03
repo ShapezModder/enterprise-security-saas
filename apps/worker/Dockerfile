@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     ruby \
     ruby-dev \
     nmap \
-    nikto \
     dnsutils \
     libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -80,6 +79,11 @@ RUN git clone --depth 1 https://github.com/urbanadventurer/WhatWeb.git /opt/what
     chmod +x /opt/whatweb/whatweb && \
     ln -s /opt/whatweb/whatweb /usr/local/bin/whatweb
 
+# Install Nikto
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
+    ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
+    chmod +x /usr/local/bin/nikto
+
 # =====================================================
 # PHASE 6: Application Setup
 # =====================================================
@@ -115,7 +119,7 @@ RUN echo "=== Verifying Tool Installations ===" && \
     which katana && katana -version && \
     which ffuf && ffuf -V && \
     which nmap && nmap --version && \
-    which nikto && \
+    which nikto && nikto -Version && \
     which sqlmap && sqlmap --version && \
     which wafw00f && \
     which wpscan && wpscan --version && \
