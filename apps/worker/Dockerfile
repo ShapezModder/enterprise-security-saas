@@ -49,10 +49,10 @@ RUN nuclei -update-templates
 # =====================================================
 
 # Upgrade pip
-RUN pip3 install --upgrade pip setuptools wheel
+RUN pip3 install --break-system-packages --upgrade pip setuptools wheel
 
 # Install Python security tools
-RUN pip3 install \
+RUN pip3 install --break-system-packages \
     sqlmap \
     truffleHog \
     wafw00f \
