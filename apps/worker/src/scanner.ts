@@ -329,147 +329,141 @@ export const runEnterpriseScan = async (
     }
 
     // --- STAGE 4: DIRECTORY FUZZING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 4] Directory Fuzzing (FFUF)...', jobId);
-    try {
-        const wordlistPath = await ensureWordlist(jobId);
-        const ffufFile = path.join(OUTPUT_DIR, `ffuf-${jobId}.json`);
-        await runCommand(`ffuf -u ${targetUrl}/FUZZ -w ${wordlistPath} -o ${ffufFile} -of json -mc 200,301,302,403 -fc 404 -t ${aggressive ? 50 : 20} -s`);
-        const ffufData = safeReadFile(ffufFile);
-        const ffufFindings = parseFfufOutput(ffufData);
-        await saveBatchFindings(jobId, ffufFindings, 'Fuzzing');
-    } catch (e) {
-        log(`[WARN] FFUF failed: ${String(e)}`, jobId);
+    if (shouldRun('directory-fuzzing')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 4] Directory Fuzzing (FFUF)...', jobId);
+        try {
+            const wordlistPath = await ensureWordlist(jobId);
+            const ffufFile = path.join(OUTPUT_DIR, `ffuf-${jobId}.json`);
+            await runCommand(`ffuf -u ${targetUrl}/FUZZ -w ${wordlistPath} -o ${ffufFile} -of json -mc 200,301,302,403 -fc 404 -t ${aggressive ? 50 : 20} -s`);
+            const ffufData = safeReadFile(ffufFile);
+            const ffufFindings = parseFfufOutput(ffufData);
+            await saveBatchFindings(jobId, ffufFindings, 'Fuzzing');
+        } catch (e) {
+            log(`[WARN] FFUF failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 4] Directory Fuzzing - SKIPPED', jobId);
     }
 
     // --- STAGE 5: SSL/TLS ASSESSMENT ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 5] SSL/TLS Assessment (testssl.sh)...', jobId);
-    try {
-        const sslFile = path.join(OUTPUT_DIR, `ssl-${jobId}.json`);
-        await runCommand(`testssl --jsonfile-pretty ${sslFile} ${targetUrl} 2>/dev/null || true`);
-        const sslOut = safeReadFile(sslFile);
-        const sslFindings = parseSslOutput(sslOut);
-        await saveBatchFindings(jobId, sslFindings, 'SSL/TLS');
-    } catch (e) {
-        log(`[WARN] testssl.sh failed: ${String(e)}`, jobId);
+    if (shouldRun('ssl-assessment')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 5] SSL/TLS Assessment (testssl.sh)...', jobId);
+        try {
+            const sslFile = path.join(OUTPUT_DIR, `ssl-${jobId}.json`);
+            await runCommand(`testssl --jsonfile-pretty ${sslFile} ${targetUrl} 2>/dev/null || true`);
+            const sslOut = safeReadFile(sslFile);
+            const sslFindings = parseSslOutput(sslOut);
+            await saveBatchFindings(jobId, sslFindings, 'SSL/TLS');
+        } catch (e) {
+            log(`[WARN] testssl.sh failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 5] SSL/TLS Assessment - SKIPPED', jobId);
     }
 
     // --- STAGE 6: VULNERABILITY VALIDATION ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 6] Vulnerability Validation (Nuclei)...', jobId);
-    try {
-        const nucleiOut = await runCommand(`nuclei -u ${targetUrl} -severity critical,high,medium -json -silent`);
-        const nucleiFindings = parseNucleiOutput(nucleiOut);
-        await saveBatchFindings(jobId, nucleiFindings, 'Nuclei');
-    } catch (e) {
-        log(`[WARN] Nuclei failed: ${String(e)}`, jobId);
+    if (shouldRun('nuclei-scan')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 6] Vulnerability Validation (Nuclei)...', jobId);
+        try {
+            const nucleiOut = await runCommand(`nuclei -u ${targetUrl} -severity critical,high,medium -json -silent`);
+            const nucleiFindings = parseNucleiOutput(nucleiOut);
+            await saveBatchFindings(jobId, nucleiFindings, 'Nuclei');
+        } catch (e) {
+            log(`[WARN] Nuclei failed: ${String(e)}`, jobId);
+        }
+    } else {
+        log('[STAGE 6] Vulnerability Validation - SKIPPED', jobId);
     }
 
     // --- STAGE 7: PORT SCANNING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 7] Port Scanning (Nmap)...', jobId);
-    try {
-        const nmapOut = await runCommand(`nmap -sV -T4 --top-ports ${aggressive ? 1000 : 100} ${primaryDomain}`);
-        const nmapFindings = parseNmapOutput(nmapOut);
-        await saveBatchFindings(jobId, nmapFindings, 'Ports');
-    } catch (e) {
-        log(`[WARN] Nmap failed: ${String(e)}`, jobId);
-    }
+    if (shouldRun('port-scan')) {
+        await ensureNotCancelled(jobId);
+        log('[STAGE 7] Port Scanning (Nmap)...', jobId);
+        try {
+            const nmapOut = await runCommand(`nmap -sV -T4 --top-ports ${aggressive ? 1000 : 100} ${primaryDomain}`);
+            const nmapFindings = parseNmapOutput(nmapOut);
+            await saveBatchFindings(jobId, nmapFindings, 'Ports');
+        } catch (e) {
+            log(`[WARN] Nmap failed: ${String(e)}`, jobId);
+        }
 
-    // --- STAGE 8-14: ADVANCED ATTACK VECTORS ---
-    const crawledUrls = crawlData.split('\\n').filter(u => u.trim().startsWith('http'));
+        await ensureNotCancelled(jobId);
+        log('[STAGE 10] SSRF Testing...', jobId);
+        try {
+            await runSSRFScanning(jobId, targetUrl, authHeader);
+        } catch (e) {
+            log(`[WARN] SSRF scanning failed: ${String(e)}`, jobId);
+        }
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 8] XSS Testing...', jobId);
-    try {
-        await runXSSScanning(jobId, targetUrl, crawledUrls, authHeader);
-    } catch (e) {
-        log(`[WARN] XSS scanning failed: ${String(e)}`, jobId);
-    }
+        await ensureNotCancelled(jobId);
+        log('[STAGE 11] Deserialization Testing...', jobId);
+        try {
+            await runDeserializationScanning(jobId, targetUrl, authHeader);
+        } catch (e) {
+            log(`[WARN] Deserialization scanning failed: ${String(e)}`, jobId);
+        }
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 9] XXE Testing...', jobId);
-    try {
-        await runXXEScanning(jobId, targetUrl, authHeader);
-    } catch (e) {
-        log(`[WARN] XXE scanning failed: ${String(e)}`, jobId);
-    }
+        await ensureNotCancelled(jobId);
+        log('[STAGE 12] Business Logic Testing...', jobId);
+        try {
+            await runBusinessLogicTesting(jobId, targetUrl, authHeader);
+        } catch (e) {
+            log(`[WARN] Business logic testing failed: ${String(e)}`, jobId);
+        }
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 10] SSRF Testing...', jobId);
-    try {
-        await runSSRFScanning(jobId, targetUrl, authHeader);
-    } catch (e) {
-        log(`[WARN] SSRF scanning failed: ${String(e)}`, jobId);
-    }
+        await ensureNotCancelled(jobId);
+        log('[STAGE 13] Cloud Security Testing...', jobId);
+        try {
+            await runCloudSecurityScanning(jobId, primaryDomain);
+        } catch (e) {
+            log(`[WARN] Cloud security scanning failed: ${String(e)}`, jobId);
+        }
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 11] Deserialization Testing...', jobId);
-    try {
-        await runDeserializationScanning(jobId, targetUrl, authHeader);
-    } catch (e) {
-        log(`[WARN] Deserialization scanning failed: ${String(e)}`, jobId);
-    }
+        await ensureNotCancelled(jobId);
+        log('[STAGE 14] Advanced Authentication Testing...', jobId);
+        try {
+            await runAuthenticationTesting(jobId, targetUrl);
+        } catch (e) {
+            log(`[WARN] Authentication testing failed: ${String(e)}`, jobId);
+        }
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 12] Business Logic Testing...', jobId);
-    try {
-        await runBusinessLogicTesting(jobId, targetUrl, authHeader);
-    } catch (e) {
-        log(`[WARN] Business logic testing failed: ${String(e)}`, jobId);
-    }
+        // --- FINALIZE ---
+        log('[CYBER WARFARE] Assessment complete – aggregating results.', jobId);
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 13] Cloud Security Testing...', jobId);
-    try {
-        await runCloudSecurityScanning(jobId, primaryDomain);
-    } catch (e) {
-        log(`[WARN] Cloud security scanning failed: ${String(e)}`, jobId);
-    }
+        // Generate PDF report
+        log('[REPORT] Generating comprehensive PDF report...', jobId);
+        const pdfPath = await generateReport(jobId);
 
-    await ensureNotCancelled(jobId);
-    log('[STAGE 14] Advanced Authentication Testing...', jobId);
-    try {
-        await runAuthenticationTesting(jobId, targetUrl);
-    } catch (e) {
-        log(`[WARN] Authentication testing failed: ${String(e)}`, jobId);
-    }
+        if (pdfPath) {
+            log('[REPORT] PDF generated successfully', jobId);
 
-    // --- FINALIZE ---
-    log('[CYBER WARFARE] Assessment complete – aggregating results.', jobId);
+            // Get job details for email
+            const job = await prisma.job.findUnique({
+                where: { id: jobId },
+                include: { user: true }
+            });
 
-    // Generate PDF report
-    log('[REPORT] Generating comprehensive PDF report...', jobId);
-    const pdfPath = await generateReport(jobId);
-
-    if (pdfPath) {
-        log('[REPORT] PDF generated successfully', jobId);
-
-        // Get job details for email
-        const job = await prisma.job.findUnique({
-            where: { id: jobId },
-            include: { user: true }
-        });
-
-        if (job && job.user.email) {
-            try {
-                log(`[EMAIL] Sending report to ${job.user.email}...`, jobId);
-                await sendReportEmail(job.user.email, jobId, job.target, pdfPath);
-                log('[EMAIL] Report sent successfully!', jobId);
-            } catch (e) {
-                log(`[ERROR] Failed to send email: ${String(e)}`, jobId);
+            if (job && job.user.email) {
+                try {
+                    log(`[EMAIL] Sending report to ${job.user.email}...`, jobId);
+                    await sendReportEmail(job.user.email, jobId, job.target, pdfPath);
+                    log('[EMAIL] Report sent successfully!', jobId);
+                } catch (e) {
+                    log(`[ERROR] Failed to send email: ${String(e)}`, jobId);
+                }
             }
         }
-    }
 
-    await prisma.job.update({
-        where: { id: jobId },
-        data: {
-            status: 'COMPLETED',
-            completedAt: new Date()
-        }
-    });
+        await prisma.job.update({
+            where: { id: jobId },
+            data: {
+                status: 'COMPLETED',
+                completedAt: new Date()
+            }
+        });
 
-    log(`[SUCCESS] Job ${jobId} completed successfully`, jobId);
-};
+        log(`[SUCCESS] Job ${jobId} completed successfully`, jobId);
+    };
