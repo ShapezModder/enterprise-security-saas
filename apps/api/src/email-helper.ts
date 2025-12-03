@@ -1,8 +1,11 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-// Email configuration - matches worker service
-const EMAIL_USER = 'supercellatcoc@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASSWORD || '';
+// Email configuration
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = 'onboarding@resend.dev'; // Default Resend testing domain
+// For production: const FROM_EMAIL = 'security@yourdomain.com';
+
+const resend = new Resend(RESEND_API_KEY);
 
 export async function sendDeclineEmail(
     recipientEmail: string,
@@ -11,25 +14,14 @@ export async function sendDeclineEmail(
 ) {
     console.log(`[EMAIL] Sending decline notification to ${recipientEmail}...`);
 
-    // Create transporter with timeout settings
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: EMAIL_USER,
-            pass: EMAIL_PASS
-        },
-        connectionTimeout: 30000, // 30 seconds
-        greetingTimeout: 30000,
-        socketTimeout: 60000,
-        pool: true // Enable connection pooling
-    });
+    if (!RESEND_API_KEY) {
+        console.error('[EMAIL] RESEND_API_KEY is missing');
+        // Don't throw - we don't want email failures to break API responses
+        return false;
+    }
 
     // Professional decline email template
-    const mailOptions = {
-        from: `FORTRESS.ai Security <${EMAIL_USER}>`,
-        to: recipientEmail,
-        subject: `🛡️ Security Assessment Request - Status Update`,
-        html: `
+    const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); padding: 30px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 32px;">🛡️ FORTRESS.ai</h1>
@@ -79,7 +71,7 @@ export async function sendDeclineEmail(
                     <p style="color: #666; line-height: 1.6;">
                         If you have questions or need assistance with your submission, 
                         please don't hesitate to contact our security team at 
-                        <a href="mailto:${EMAIL_USER}" style="color: #22c55e; text-decoration: none;">${EMAIL_USER}</a>
+                        <a href="mailto:security@fortress.ai" style="color: #22c55e; text-decoration: none;">security@fortress.ai</a>
                     </p>
                     
                     <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
@@ -99,18 +91,29 @@ export async function sendDeclineEmail(
                     </p>
                 </div>
             </div>
-        `
-    };
+        `;
 
-    // Send email with retry logic
+    // Send email
     try {
-        const info = await transporter.sendMail(mailOptions);
+        const { data, error } = await resend.emails.send({
+            from: `FORTRESS.ai Security <${FROM_EMAIL}>`,
+            to: recipientEmail,
+            subject: `🛡️ Security Assessment Request - Status Update`,
+            html: htmlContent
+        });
+
+        if (error) {
+            console.error('[EMAIL] Resend API Error:', error);
+            // Don't throw - we don't want email failures to break API responses
+            return false;
+        }
+
         console.log(`[EMAIL] Decline notification sent successfully to ${recipientEmail}`);
-        console.log(`[EMAIL] Message ID: ${info.messageId}`);
+        console.log(`[EMAIL] Message ID: ${data?.id}`);
         return true;
     } catch (error) {
         console.error(`[EMAIL] Failed to send decline notification:`, error);
-        // Don't throw - we don't want email failures to break API responses
         return false;
     }
 }
+
