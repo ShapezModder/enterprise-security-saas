@@ -177,6 +177,15 @@ app.post('/api/admin/start-job', async (req: Request, res: Response) => {
 
         // NOW queue it to BullMQ for processing
         if (queue) {
+            // Update job status to RUNNING
+            await prisma.job.update({
+                where: { id: jobId },
+                data: {
+                    status: 'RUNNING',
+                    startedAt: new Date()
+                }
+            });
+
             await queue.add('run-scan', {
                 jobId: job.id,
                 target: job.target,
