@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { sendDeclineEmail } from './email-helper';
 dotenv.config();
 
 const prisma = new PrismaClient();
@@ -260,9 +261,13 @@ app.post('/api/admin/decline-job', async (req: Request, res: Response) => {
 
         console.log(`[API] Job ${jobId} declined by admin. Notifying user...`);
 
-        // Note: Email sending will be handled by importing from worker (see implementation notes)
-        // For now, we log that it should be sent
-        console.log(`[API] TODO: Send decline email to ${job.user.email}`);
+        // Send decline notification email
+        try {
+            await sendDeclineEmail(job.user.email, job.target, reason);
+        } catch (emailError) {
+            console.error(`[API] Email sending failed, but continuing:`, emailError);
+            // Don't fail the API request if email fails
+        }
 
         return res.json({ success: true, message: 'Job declined successfully', userEmail: job.user.email, target: job.target, reason });
     } catch (e: any) {

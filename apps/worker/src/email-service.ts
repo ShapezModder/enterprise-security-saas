@@ -14,13 +14,17 @@ export async function sendReportEmail(
 ) {
     console.log(`[EMAIL] Sending report to ${recipientEmail}...`);
 
-    // Create transporter
+    // Create transporter with timeout settings to prevent connection hangs
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
             user: EMAIL_USER,
             pass: EMAIL_PASS
-        }
+        },
+        connectionTimeout: 30000, // 30 seconds to establish connection
+        greetingTimeout: 30000,   // 30 seconds for SMTP greeting
+        socketTimeout: 60000,      // 60 seconds for socket inactivity
+        pool: true                 // Enable connection pooling for better performance
     });
 
     // Email content
@@ -118,13 +122,17 @@ export async function sendDeclineEmail(
 ) {
     console.log(`[EMAIL] Sending decline notification to ${recipientEmail}...`);
 
-    // Create transporter
+    // Create transporter with timeout settings to prevent connection hangs
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
             user: EMAIL_USER,
             pass: EMAIL_PASS
-        }
+        },
+        connectionTimeout: 30000, // 30 seconds to establish connection
+        greetingTimeout: 30000,   // 30 seconds for SMTP greeting
+        socketTimeout: 60000,      // 60 seconds for socket inactivity
+        pool: true                 // Enable connection pooling for better performance
     });
 
     // Professional decline email template
