@@ -21,5 +21,5 @@ RUN npm run build
 # Expose port
 EXPOSE 3001
 
-# Run migrations and start (resolve stuck migration first)
-CMD ["sh", "-c", "npx prisma migrate resolve --applied 20251203_add_selected_stages || true && npx prisma migrate deploy && npm start"]
+# Run migrations and start (mark stuck migration as rolled back first)
+CMD ["sh", "-c", "npx prisma migrate resolve --rolled-back 20251203_add_selected_stages || true && npx prisma migrate deploy && npm start"]
