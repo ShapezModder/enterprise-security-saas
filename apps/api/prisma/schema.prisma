@@ -65,6 +65,10 @@ model Job {
   errorMessage    String?   @db.Text
   consentDocument String?   // path or URL to signed SoW / consent
   
+  // Customer contact info for manual distribution
+  customerEmail   String?   // Email from the scan request form
+  reportSentAt    DateTime? // When operator manually sent the report
+  
   user          User      @relation(fields: [userId], references: [id])
   createdAt     DateTime  @default(now())
 }

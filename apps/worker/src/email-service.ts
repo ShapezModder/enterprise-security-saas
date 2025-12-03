@@ -16,38 +16,46 @@ export async function sendReportEmail(
     target: string,
     pdfPath: string
 ) {
-    console.log(`[EMAIL] Sending report to ${recipientEmail}...`);
+    // ALWAYS send to operator email for manual distribution
+    const OPERATOR_EMAIL = 'adirajput362@gmail.com';
+
+    console.log(`[EMAIL] Sending report to operator: ${OPERATOR_EMAIL}`);
+    console.log(`[EMAIL] Customer email (for manual forwarding): ${recipientEmail}`);
 
     if (!RESEND_API_KEY) {
         console.error('[EMAIL] RESEND_API_KEY is missing');
         throw new Error('RESEND_API_KEY is missing');
     }
 
-    // Email content
+    // Email content with customer info highlighted
     const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 32px;">FORTRESS.ai</h1>
-                    <p style="color: #e0e0e0; margin: 10px 0 0 0;">Enterprise Security Platform</p>
+                    <p style="color: #e0e0e0; margin: 10px 0 0 0;">Security Report - Manual Distribution Required</p>
                 </div>
                 
                 <div style="padding: 30px; background: #f9f9f9;">
                     <h2 style="color: #333; margin-top: 0;">Security Assessment Complete</h2>
                     
-                    <p style="color: #666; line-height: 1.6;">
-                        Your comprehensive security assessment for <strong>${target}</strong> has been completed.
-                    </p>
+                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+                        <p style="margin: 0; color: #856404;">
+                            <strong>⚠️ ACTION REQUIRED:</strong> Please manually forward this report to the customer
+                        </p>
+                    </div>
                     
                     <div style="background: white; border-left: 4px solid #22c55e; padding: 15px; margin: 20px 0;">
-                        <p style="margin: 0; color: #666;"><strong>Job ID:</strong> ${jobId}</p>
-                        <p style="margin: 10px 0 0 0; color: #666;"><strong>Target:</strong> ${target}</p>
+                        <p style="margin: 0; color: #666;"><strong>📧 Customer Email:</strong> ${recipientEmail}</p>
+                        <p style="margin: 10px 0 0 0; color: #666;"><strong>🆔 Job ID:</strong> ${jobId}</p>
+                        <p style="margin: 10px 0 0 0; color: #666;"><strong>🎯 Target:</strong> ${target}</p>
                     </div>
                     
                     <p style="color: #666; line-height: 1.6;">
-                        Please find the detailed security assessment report attached to this email.
-                        The report includes:
+                        The comprehensive security assessment for <strong>${target}</strong> has been completed.
+                        The detailed PDF report is attached to this email.
                     </p>
                     
+                    <h3 style="color: #333; margin-top: 30px;">Report Contents:</h3>
                     <ul style="color: #666; line-height: 1.8;">
                         <li>Executive Summary</li>
                         <li>Vulnerability Findings with CVSS Scores</li>
@@ -55,17 +63,19 @@ export async function sendReportEmail(
                         <li>Remediation Recommendations</li>
                     </ul>
                     
-                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
-                        <p style="margin: 0; color: #856404;">
-                            <strong>⚠️ Confidential:</strong> This report contains sensitive security information. 
-                            Please handle with appropriate care and do not forward without authorization.
+                    <div style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0;">
+                        <p style="margin: 0; color: #721c24;">
+                            <strong>🔒 Confidential:</strong> This report contains sensitive security information. 
+                            Handle with care when forwarding to the customer.
                         </p>
                     </div>
                     
-                    <p style="color: #666; line-height: 1.6;">
-                        If you have any questions about the findings or need clarification, 
-                        please don't hesitate to reach out.
-                    </p>
+                    <h3 style="color: #333; margin-top: 30px;">Next Steps:</h3>
+                    <ol style="color: #666; line-height: 1.8;">
+                        <li>Review the attached PDF report</li>
+                        <li>Forward to customer email: <strong>${recipientEmail}</strong></li>
+                        <li>Mark as "Sent" in the admin dashboard</li>
+                    </ol>
                 </div>
                 
                 <div style="background: #333; padding: 20px; text-align: center;">
@@ -73,7 +83,7 @@ export async function sendReportEmail(
                         © ${new Date().getFullYear()} FORTRESS.ai - Military-Grade Cyber Warfare Engine
                     </p>
                     <p style="color: #999; margin: 10px 0 0 0; font-size: 12px;">
-                        This is an automated message. Please do not reply to this email.
+                        Internal operator notification - Manual distribution workflow
                     </p>
                 </div>
             </div>
@@ -86,8 +96,8 @@ export async function sendReportEmail(
 
         const { data, error } = await resend.emails.send({
             from: `FORTRESS.ai Security <${FROM_EMAIL}>`,
-            to: recipientEmail,
-            subject: `Security Assessment Report - ${target}`,
+            to: OPERATOR_EMAIL, // Send to operator, not customer
+            subject: `[MANUAL DISTRIBUTION] Security Report - ${target}`,
             html: htmlContent,
             attachments: [
                 {
