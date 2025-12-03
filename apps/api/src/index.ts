@@ -212,7 +212,11 @@ app.get('/api/admin/jobs', async (req: Request, res: Response) => {
         });
 
         return res.json({ jobs });
-    });
+    } catch (e: any) {
+        console.error('[API ERROR]', e);
+        return res.status(500).json({ error: 'Failed to fetch jobs' });
+    }
+});
 
 // NEW: Admin endpoint to decline a pending job
 app.post('/api/admin/decline-job', async (req: Request, res: Response) => {
