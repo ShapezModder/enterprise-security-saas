@@ -15,6 +15,7 @@ import { getCVSSForVulnerability } from './cvss-calculator';
 import { io as ioClient } from 'socket.io-client';
 import { generateReport } from './reporter';
 import { sendReportEmail } from './email-service';
+import { quickCrawl } from './lightweight-crawler';
 
 const prisma = new PrismaClient();
 const OUTPUT_DIR = path.join(process.cwd(), 'scans');
@@ -310,22 +311,60 @@ export const runEnterpriseScan = async (
     let crawlData = '';
     if (shouldRun('web-crawling')) {
         await ensureNotCancelled(jobId);
-        log('[STAGE 3] Deep Web Crawling (Katana)...', jobId);
+        log('[STAGE 3] Deep Web Crawling (Lightweight Crawler)...', jobId);
         try {
+            const depth = aggressive ? 3 : 2;
+            const maxPages = aggressive ? 50 : 30;
+
+            log(`[CRAWL] Starting crawl with depth=${depth}, maxPages=${maxPages}`, jobId);
+
+            const crawlResult = await quickCrawl(targetUrl, {
+                maxDepth: depth,
+                maxPages: maxPages,
+                timeout: 5000, // 5 seconds per page
+                followExternal: false
+            });
+
+            // Save discovered URLs to file for compatibility with other stages
             const crawlFile = path.join(OUTPUT_DIR, `crawl-${jobId}.txt`);
-            // Reduced depth and added timeout to prevent hanging
-            const depth = aggressive ? 3 : 2; // Reduced from 5/3 to 3/2
-            await runCommand(`katana -u ${targetUrl} -d ${depth} -o ${crawlFile} -silent -timeout 60`);
-            crawlData = safeReadFile(crawlFile);
-            const urlCount = crawlData.split('\\n').filter(u => u.trim()).length;
-            log(`[CRAWL] Discovered ${urlCount} URLs`, jobId);
+            fs.writeFileSync(crawlFile, crawlResult.urls.join('\n'), 'utf-8');
+            crawlData = crawlResult.urls.join('\n');
+
+            log(`[CRAWL] Discovered ${crawlResult.urls.length} URLs`, jobId);
+            log(`[CRAWL] Found ${crawlResult.forms.length} forms`, jobId);
+            log(`[CRAWL] Identified ${crawlResult.endpoints.length} API endpoints`, jobId);
+
+            // Save forms and endpoints as findings
+            if (crawlResult.forms.length > 0) {
+                await saveFinding(
+                    jobId,
+                    'Recon',
+                    'Forms Discovered',
+                    'info',
+                    `Found ${crawlResult.forms.length} forms on the target`,
+                    crawlResult.forms.slice(0, 10).join('\n'),
+                    'Review forms for proper input validation and CSRF protection'
+                );
+            }
+
+            if (crawlResult.endpoints.length > 0) {
+                await saveFinding(
+                    jobId,
+                    'Recon',
+                    'API Endpoints Discovered',
+                    'info',
+                    `Found ${crawlResult.endpoints.length} potential API endpoints`,
+                    crawlResult.endpoints.slice(0, 10).join('\n'),
+                    'Ensure all API endpoints have proper authentication and authorization'
+                );
+            }
         } catch (e) {
-            log(`[WARN] Katana failed or timed out: ${String(e)}`, jobId);
+            log(`[WARN] Crawling failed: ${String(e)}`, jobId);
             log('[INFO] Continuing scan without crawl data', jobId);
             crawlData = '';
         }
     } else {
-        log('[STAGE 3] Deep Web Crawling - SKIPPED (Katana disabled)', jobId);
+        log('[STAGE 3] Deep Web Crawling - SKIPPED', jobId);
     }
 
     // --- STAGE 4: DIRECTORY FUZZING ---
