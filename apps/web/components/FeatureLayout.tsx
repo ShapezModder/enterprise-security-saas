@@ -25,7 +25,7 @@ export default function FeatureLayout({ title, subtitle, description, icon, colo
       {/* Navigation */}
       <nav className="sticky top-0 z-50 px-8 py-6 border-b border-white/5 bg-[#050505]/80 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-            <ChevronLeft size={20} /> Back to Mission Control
+            <ChevronLeft size={20} /> Back
         </Link>
       </nav>
 

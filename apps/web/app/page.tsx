@@ -283,7 +283,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <div className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-green-500 flex items-center gap-2">
-                        <LayoutDashboard /> FORTRESS.ai Mission Control
+                        <LayoutDashboard /> FORTRESS.ai Dashboard
                     </h1>
                     <p className="text-gray-400 text-sm">Partner Operations Dashboard</p>
                 </div>
