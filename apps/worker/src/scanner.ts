@@ -33,7 +33,7 @@ if (apiUrl.startsWith('/') && !apiUrl.startsWith('//')) {
 }
 
 const socket = ioClient(apiUrl, {
-    transports: ['polling'], // Force polling only to bypass Cloudflare
+    transports: ['polling'],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 2000,
@@ -43,7 +43,6 @@ const socket = ioClient(apiUrl, {
 
 let lastErrorLog = 0;
 socket.on('connect_error', (err) => {
-    // Rate-limited error logging (once per minute) to avoid spam
     const now = Date.now();
     if (!lastErrorLog || now - lastErrorLog > 60000) {
         console.error(`[SCANNER] Socket.IO Connection Error (URL: ${apiUrl}):`, err.message || err);
@@ -60,15 +59,14 @@ socket.on('disconnect', () => {
 });
 
 export interface ScanOptions {
-    aggressive?: boolean;          // turn up depth/threads/templates
-    destructive?: boolean;         // allow SQLMap/Commix style intrusive tests
-    maxBulkTargets?: number;       // how many subdomains to hit with heavy scanners
+    aggressive?: boolean;
+    destructive?: boolean;
+    maxBulkTargets?: number;
 }
 
 // --- HELPER: LOGGING with Socket.IO ---
 const log = (msg: string, jobId?: string) => {
     console.log(msg);
-    // Stream to admin dashboard via Socket.IO
     if (jobId && socket.connected) {
         socket.emit('scan_log', { jobId, log: msg });
     }
@@ -79,7 +77,6 @@ const log = (msg: string, jobId?: string) => {
 function runCommand(cmd: string): Promise<string> {
     return new Promise((resolve) => {
         exec(cmd, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
-            // Many security tools use non-zero exit codes for \"findings\" – don't treat as fatal.
             resolve(stdout || stderr);
         });
     });
@@ -90,30 +87,16 @@ function safeReadFile(filePath: string): string {
     catch { return ''; }
 }
 
-// Prefer images that actually exist locally; fall back to original names
-async function chooseImage(candidates: string[], fallback: string, jobId?: string): Promise<string> {
-    for (const img of candidates) {
-        try {
-            const out = await runCommand(`docker images -q ${img}`);
-            if (out && out.trim().length > 0) {
-                log(`[DOCKER] Using local image: ${img}`, jobId);
-                return img;
-            }
-            const out2 = await runCommand(`docker images -q docker.io/${img}`);
-            if (out2 && out2.trim().length > 0) {
-                const full = `docker.io/${img}`;
-                log(`[DOCKER] Using local image: ${full}`, jobId);
-                return full;
-            }
-        } catch {
-            // ignore and try next
-        }
+// Download wordlist for FFUF if not exists
+async function ensureWordlist(jobId?: string): Promise<string> {
+    const wordlistPath = path.join(OUTPUT_DIR, 'common.txt');
+    if (!fs.existsSync(wordlistPath)) {
+        log('[SETUP] Downloading FFUF wordlist...', jobId);
+        await runCommand(`wget -q ${WORDLIST_URL} -O ${wordlistPath}`);
     }
-    log(`[DOCKER] No preferred local image found. Falling back to: ${fallback}`, jobId);
-    return fallback;
+    return wordlistPath;
 }
 
-// Optional: allow cancelling a running job by changing DB status to \"CANCELLED\"
 async function ensureNotCancelled(jobId: string) {
     const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (job && (job as any).status === 'CANCELLED') {
@@ -121,7 +104,6 @@ async function ensureNotCancelled(jobId: string) {
     }
 }
 
-// Save a single finding (dedup on jobId+title)
 async function saveFinding(
     jobId: string,
     category: string,
@@ -175,49 +157,6 @@ function parseFfufOutput(jsonString: string) {
     return findings;
 }
 
-function parseHogOutput(output: string) {
-    const findings: any[] = [];
-    if (!output.trim()) return findings;
-    const lines = output.split('\\n');
-    for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-            const data = JSON.parse(line);
-            if (data.SourceMetadata) {
-                findings.push({
-                    title: `Leaked Secret: ${data.DetectorName}`,
-                    severity: 'critical',
-                    description: `Active credential detected in production assets.`,
-                    evidence: `Raw Secret: ${String(data.RawEnvelope || '').substring(0, 10)}...`,
-                    remediation: 'Immediate rotation and key revocation required.'
-                });
-            }
-        } catch { /* ignore */ }
-    }
-    return findings;
-}
-
-function parseSslOutput(jsonString: string) {
-    const findings: any[] = [];
-    if (!jsonString.trim()) return findings;
-    try {
-        const data = JSON.parse(jsonString);
-        const results = Array.isArray(data) ? data : [data];
-        for (const res of results) {
-            if (res.severity && (res.severity === 'HIGH' || res.severity === 'CRITICAL')) {
-                findings.push({
-                    title: `SSL/TLS Weakness: ${res.id}`,
-                    severity: res.severity.toLowerCase(),
-                    description: `Cryptographic flaw detected: ${res.finding}.`,
-                    evidence: `CWE: ${res.cwe || 'N/A'}`,
-                    remediation: 'Disable weak ciphers and follow modern TLS best practices.'
-                });
-            }
-        }
-    } catch { /* ignore */ }
-    return findings;
-}
-
 function parseNucleiOutput(output: string) {
     const findings: any[] = [];
     if (!output.trim()) return findings;
@@ -258,6 +197,27 @@ function parseNmapOutput(output: string) {
     return findings;
 }
 
+function parseSslOutput(jsonString: string) {
+    const findings: any[] = [];
+    if (!jsonString.trim()) return findings;
+    try {
+        const data = JSON.parse(jsonString);
+        const results = Array.isArray(data) ? data : [data];
+        for (const res of results) {
+            if (res.severity && (res.severity === 'HIGH' || res.severity === 'CRITICAL')) {
+                findings.push({
+                    title: `SSL/TLS Weakness: ${res.id}`,
+                    severity: res.severity.toLowerCase(),
+                    description: `Cryptographic flaw detected: ${res.finding}.`,
+                    evidence: `CWE: ${res.cwe || 'N/A'}`,
+                    remediation: 'Disable weak ciphers and follow modern TLS best practices.'
+                });
+            }
+        }
+    } catch { /* ignore */ }
+    return findings;
+}
+
 // --- MAIN SCAN PIPELINE ---
 
 export const runEnterpriseScan = async (
@@ -268,10 +228,9 @@ export const runEnterpriseScan = async (
 ) => {
     const aggressive = options.aggressive ?? true;
     const destructive = options.destructive ?? true;
-    const maxBulkTargets = options.maxBulkTargets ?? (aggressive ? 25 : 10);
 
-    log(`[CYBER WARFARE] Initiating Total Infrastructure Assessment for ${primaryDomain}...`, jobId);
-    log(`[CONFIG] Aggressive: ${aggressive}, Destructive: ${destructive}, MaxTargets: ${maxBulkTargets}`, jobId);
+    log(`[CYBER WARFARE] Initiating Security Assessment for ${primaryDomain}...`, jobId);
+    log(`[CONFIG] Aggressive: ${aggressive}, Destructive: ${destructive}`, jobId);
 
     if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -280,137 +239,108 @@ export const runEnterpriseScan = async (
     // --- STAGE 0: WAF FINGERPRINTING ---
     await ensureNotCancelled(jobId);
     log('[STAGE 0] WAF Fingerprinting (wafw00f)...', jobId);
-    const wafImage = await chooseImage(['secsi/wafw00f:latest'], 'secsi/wafw00f:latest', jobId);
-    const wafOut = await runCommand(`docker run --rm ${wafImage} ${targetUrl}`);
-    if (wafOut.toLowerCase().includes('cloudflare') || wafOut.toLowerCase().includes('akamai')) {
-        await saveFinding(jobId, 'WAF', 'WAF Detected', 'info', `WAF detected: ${wafOut.substring(0, 200)}`, wafOut.substring(0, 500), 'WAF is active. Adjust scan intensity accordingly.');
+    try {
+        const wafOut = await runCommand(`wafw00f ${targetUrl}`);
+        if (wafOut.toLowerCase().includes('cloudflare') || wafOut.toLowerCase().includes('akamai')) {
+            await saveFinding(jobId, 'WAF', 'WAF Detected', 'info', `WAF detected: ${wafOut.substring(0, 200)}`, wafOut.substring(0, 500), 'WAF is active. Adjust scan intensity accordingly.');
+        }
+    } catch (e) {
+        log(`[WARN] WAF scan failed: ${String(e)}`, jobId);
     }
 
     // --- STAGE 1: TECH STACK DETECTION ---
     await ensureNotCancelled(jobId);
     log('[STAGE 1] Tech Stack Detection (WhatWeb)...', jobId);
-    const wwImage = await chooseImage(['urbanadventurer/whatweb:latest'], 'urbanadventurer/whatweb:latest', jobId);
-    const wwOut = await runCommand(`docker run --rm ${wwImage} ${targetUrl}`);
-    if (wwOut) {
-        await saveFinding(jobId, 'Recon', 'Technology Stack', 'info', `Detected technologies: ${wwOut.substring(0, 300)}`, wwOut.substring(0, 1000), 'Review exposed technology versions for known vulnerabilities.');
+    try {
+        const wwOut = await runCommand(`whatweb ${targetUrl}`);
+        if (wwOut) {
+            await saveFinding(jobId, 'Recon', 'Technology Stack', 'info', `Detected technologies: ${wwOut.substring(0, 300)}`, wwOut.substring(0, 1000), 'Review exposed technology versions for known vulnerabilities.');
+        }
+    } catch (e) {
+        log(`[WARN] WhatWeb scan failed: ${String(e)}`, jobId);
     }
 
     // --- STAGE 2: SUBDOMAIN ENUMERATION ---
     await ensureNotCancelled(jobId);
     log('[STAGE 2] Subdomain Enumeration (subfinder)...', jobId);
-    const subImage = await chooseImage(['projectdiscovery/subfinder:latest'], 'projectdiscovery/subfinder:latest', jobId);
-    const subFile = `subdomains-${jobId}.txt`;
-    await runCommand(`docker run --rm -v "${OUTPUT_DIR}:/data" ${subImage} -d ${primaryDomain} -o /data/${subFile} -silent`);
-    const subData = safeReadFile(path.join(OUTPUT_DIR, subFile));
-    const subdomains = subData.split('\\n').filter(s => s.trim());
-    log(`[RECON] Found ${subdomains.length} subdomains`, jobId);
-
-    // --- STAGE 3: WORDPRESS DETECTION ---
-    await ensureNotCancelled(jobId);
-    const isWordPress = WP_DETECTION_KEYWORDS.some(kw => wwOut.toLowerCase().includes(kw));
-    if (isWordPress) {
-        log('[STAGE 3] WordPress Detected - Running WPScan...', jobId);
-        const wpImage = await chooseImage(['wpscanteam/wpscan:latest'], 'wpscanteam/wpscan:latest', jobId);
-        const wpOut = await runCommand(`docker run --rm ${wpImage} --url ${targetUrl} --enumerate vp,vt --format json --no-banner`);
-        if (wpOut.includes('vulnerabilities')) {
-            await saveFinding(jobId, 'WordPress', 'WordPress Vulnerabilities Found', 'high', 'WPScan detected vulnerable plugins or themes.', wpOut.substring(0, 2000), 'Update WordPress core, plugins, and themes to latest versions.');
-        }
-    } else {
-        log('[STAGE 3] WordPress not detected, skipping WPScan', jobId);
+    let subdomains: string[] = [];
+    try {
+        const subFile = path.join(OUTPUT_DIR, `subdomains-${jobId}.txt`);
+        await runCommand(`subfinder -d ${primaryDomain} -o ${subFile} -silent`);
+        const subData = safeReadFile(subFile);
+        subdomains = subData.split('\\n').filter(s => s.trim());
+        log(`[RECON] Found ${subdomains.length} subdomains`, jobId);
+    } catch (e) {
+        log(`[WARN] Subfinder failed: ${String(e)}`, jobId);
     }
 
-    // --- STAGE 4: DEEP WEB CRAWLING ---
+    // --- STAGE 3: DEEP WEB CRAWLING ---
     await ensureNotCancelled(jobId);
-    log('[STAGE 4] Deep Web Crawling (Katana)...', jobId);
-    const katanaImage = await chooseImage(['projectdiscovery/katana:latest'], 'projectdiscovery/katana:latest', jobId);
-    const crawlFile = `crawl-${jobId}.txt`;
-    await runCommand(`docker run --rm -v "${OUTPUT_DIR}:/data" ${katanaImage} -u ${targetUrl} -d ${aggressive ? 5 : 3} -o /data/${crawlFile} -silent`);
-    const crawlData = safeReadFile(path.join(OUTPUT_DIR, crawlFile));
-    log(`[CRAWL] Discovered ${crawlData.split('\\n').length} URLs`, jobId);
-
-    // --- STAGE 5: DIRECTORY FUZZING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 5] Directory Fuzzing (FFUF)...', jobId);
-    const ffufImage = await chooseImage(['secsi/ffuf:latest'], 'secsi/ffuf:latest', jobId);
-    const ffufFile = `ffuf-${jobId}.json`;
-    await runCommand(`docker run --rm -v "${OUTPUT_DIR}:/data" ${ffufImage} -u ${targetUrl}/FUZZ -w /data/common.txt -o /data/${ffufFile} -of json -mc 200,301,302,403 -fc 404 -t ${aggressive ? 50 : 20}`);
-    const ffufData = safeReadFile(path.join(OUTPUT_DIR, ffufFile));
-    const ffufFindings = parseFfufOutput(ffufData);
-    await saveBatchFindings(jobId, ffufFindings, 'Fuzzing');
-
-    // --- STAGE 6: WEB SERVER CHECKS ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 6] Web Server Checks (Nikto)...', jobId);
-    const niktoImage = await chooseImage(['frapsoft/nikto:latest'], 'frapsoft/nikto:latest', jobId);
-    const niktoOut = await runCommand(`docker run --rm ${niktoImage} -h ${targetUrl} -Tuning 123bde`);
-    if (niktoOut.includes('OSVDB') || niktoOut.includes('CVE')) {
-        await saveFinding(jobId, 'WebServer', 'Nikto Findings', 'medium', 'Nikto detected potential web server vulnerabilities.', niktoOut.substring(0, 2000), 'Review Nikto output and apply recommended patches.');
+    log('[STAGE 3] Deep Web Crawling (Katana)...', jobId);
+    let crawlData = '';
+    try {
+        const crawlFile = path.join(OUTPUT_DIR, `crawl-${jobId}.txt`);
+        await runCommand(`katana -u ${targetUrl} -d ${aggressive ? 5 : 3} -o ${crawlFile} -silent`);
+        crawlData = safeReadFile(crawlFile);
+        log(`[CRAWL] Discovered ${crawlData.split('\\n').length} URLs`, jobId);
+    } catch (e) {
+        log(`[WARN] Katana failed: ${String(e)}`, jobId);
     }
 
-    // --- STAGE 7: SECRET HUNTING ---
+    // --- STAGE 4: DIRECTORY FUZZING ---
     await ensureNotCancelled(jobId);
-    log('[STAGE 7] Secret Hunting (TruffleHog)...', jobId);
-    const hogImage = await chooseImage(['trufflesecurity/trufflehog:latest'], 'trufflesecurity/trufflehog:latest', jobId);
-    const hogOut = await runCommand(`docker run --rm ${hogImage} http ${targetUrl} --json`);
-    const hogFindings = parseHogOutput(hogOut);
-    await saveBatchFindings(jobId, hogFindings, 'Secrets');
-
-    // --- STAGE 8: SSL/TLS ASSESSMENT ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 8] SSL/TLS Assessment (testssl.sh)...', jobId);
-    const sslImage = await chooseImage(['drwetter/testssl.sh:latest'], 'drwetter/testssl.sh:latest', jobId);
-    const sslOut = await runCommand(`docker run --rm ${sslImage} --jsonfile-pretty /dev/stdout ${targetUrl}`);
-    const sslFindings = parseSslOutput(sslOut);
-    await saveBatchFindings(jobId, sslFindings, 'SSL/TLS');
-
-    // --- STAGE 9: VULNERABILITY VALIDATION ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 9] Vulnerability Validation (Nuclei)...', jobId);
-    const nucleiImage = await chooseImage(['projectdiscovery/nuclei:latest'], 'projectdiscovery/nuclei:latest', jobId);
-    const nucleiOut = await runCommand(`docker run --rm ${nucleiImage} -u ${targetUrl} -severity critical,high,medium -json -silent`);
-    const nucleiFindings = parseNucleiOutput(nucleiOut);
-    await saveBatchFindings(jobId, nucleiFindings, 'Nuclei');
-
-    // --- STAGE 10: PORT SCANNING ---
-    await ensureNotCancelled(jobId);
-    log('[STAGE 10] Port Scanning (Nmap)...', jobId);
-    const nmapImage = await chooseImage(['instrumentisto/nmap:latest'], 'instrumentisto/nmap:latest', jobId);
-    const nmapOut = await runCommand(`docker run --rm ${nmapImage} -sV -T4 --top-ports ${aggressive ? 1000 : 100} ${primaryDomain}`);
-    const nmapFindings = parseNmapOutput(nmapOut);
-    await saveBatchFindings(jobId, nmapFindings, 'Ports');
-
-    // --- STAGE 11-17: ADVANCED ATTACK VECTORS ---
-    if (destructive) {
-        log('[STAGE 11] SQL Injection Testing (SQLMap)...', jobId);
-        const sqlmapImage = await chooseImage(['sagikazarmark/sqlmap:latest'], 'sagikazarmark/sqlmap:latest', jobId);
-        for (const url of crawlData.split('\\n').slice(0, 5)) {
-            if (url.includes('?')) {
-                const sqlOut = await runCommand(`docker run --rm ${sqlmapImage} -u "${url}" --batch --risk 2 --level 2`);
-                if (sqlOut.includes('vulnerable')) {
-                    await saveFinding(jobId, 'SQLi', `SQL Injection in ${url}`, 'critical', 'SQLMap detected SQL injection vulnerability.', sqlOut.substring(0, 2000), 'Use parameterized queries and input validation.');
-                }
-            }
-        }
-
-        log('[STAGE 12] Command Injection Testing (Commix)...', jobId);
-        const commixImage = await chooseImage(['commixproject/commix-testbed:latest'], 'commixproject/commix-testbed:latest', jobId);
-        for (const url of crawlData.split('\\n').slice(0, 5)) {
-            if (url.includes('?')) {
-                const commixOut = await runCommand(`docker run --rm ${commixImage} --url="${url}" --batch`);
-                if (commixOut.includes('vulnerable')) {
-                    await saveFinding(jobId, 'CMDi', `Command Injection in ${url}`, 'critical', 'Commix detected command injection vulnerability.', commixOut.substring(0, 2000), 'Sanitize all user input and avoid shell execution.');
-                }
-            }
-        }
-    } else {
-        log('[STAGE 11-12] Destructive tests skipped (destructive=false)', jobId);
+    log('[STAGE 4] Directory Fuzzing (FFUF)...', jobId);
+    try {
+        const wordlistPath = await ensureWordlist(jobId);
+        const ffufFile = path.join(OUTPUT_DIR, `ffuf-${jobId}.json`);
+        await runCommand(`ffuf -u ${targetUrl}/FUZZ -w ${wordlistPath} -o ${ffufFile} -of json -mc 200,301,302,403 -fc 404 -t ${aggressive ? 50 : 20} -s`);
+        const ffufData = safeReadFile(ffufFile);
+        const ffufFindings = parseFfufOutput(ffufData);
+        await saveBatchFindings(jobId, ffufFindings, 'Fuzzing');
+    } catch (e) {
+        log(`[WARN] FFUF failed: ${String(e)}`, jobId);
     }
 
-    // Advanced attack stages
+    // --- STAGE 5: SSL/TLS ASSESSMENT ---
+    await ensureNotCancelled(jobId);
+    log('[STAGE 5] SSL/TLS Assessment (testssl.sh)...', jobId);
+    try {
+        const sslFile = path.join(OUTPUT_DIR, `ssl-${jobId}.json`);
+        await runCommand(`testssl --jsonfile-pretty ${sslFile} ${targetUrl} 2>/dev/null || true`);
+        const sslOut = safeReadFile(sslFile);
+        const sslFindings = parseSslOutput(sslOut);
+        await saveBatchFindings(jobId, sslFindings, 'SSL/TLS');
+    } catch (e) {
+        log(`[WARN] testssl.sh failed: ${String(e)}`, jobId);
+    }
+
+    // --- STAGE 6: VULNERABILITY VALIDATION ---
+    await ensureNotCancelled(jobId);
+    log('[STAGE 6] Vulnerability Validation (Nuclei)...', jobId);
+    try {
+        const nucleiOut = await runCommand(`nuclei -u ${targetUrl} -severity critical,high,medium -json -silent`);
+        const nucleiFindings = parseNucleiOutput(nucleiOut);
+        await saveBatchFindings(jobId, nucleiFindings, 'Nuclei');
+    } catch (e) {
+        log(`[WARN] Nuclei failed: ${String(e)}`, jobId);
+    }
+
+    // --- STAGE 7: PORT SCANNING ---
+    await ensureNotCancelled(jobId);
+    log('[STAGE 7] Port Scanning (Nmap)...', jobId);
+    try {
+        const nmapOut = await runCommand(`nmap -sV -T4 --top-ports ${aggressive ? 1000 : 100} ${primaryDomain}`);
+        const nmapFindings = parseNmapOutput(nmapOut);
+        await saveBatchFindings(jobId, nmapFindings, 'Ports');
+    } catch (e) {
+        log(`[WARN] Nmap failed: ${String(e)}`, jobId);
+    }
+
+    // --- STAGE 8-14: ADVANCED ATTACK VECTORS ---
     const crawledUrls = crawlData.split('\\n').filter(u => u.trim().startsWith('http'));
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 13] XSS Testing...', jobId);
+    log('[STAGE 8] XSS Testing...', jobId);
     try {
         await runXSSScanning(jobId, targetUrl, crawledUrls, authHeader);
     } catch (e) {
@@ -418,7 +348,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 14] XXE Testing...', jobId);
+    log('[STAGE 9] XXE Testing...', jobId);
     try {
         await runXXEScanning(jobId, targetUrl, authHeader);
     } catch (e) {
@@ -426,7 +356,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 15] SSRF Testing...', jobId);
+    log('[STAGE 10] SSRF Testing...', jobId);
     try {
         await runSSRFScanning(jobId, targetUrl, authHeader);
     } catch (e) {
@@ -434,7 +364,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 16] Deserialization Testing...', jobId);
+    log('[STAGE 11] Deserialization Testing...', jobId);
     try {
         await runDeserializationScanning(jobId, targetUrl, authHeader);
     } catch (e) {
@@ -442,7 +372,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 17] Business Logic Testing...', jobId);
+    log('[STAGE 12] Business Logic Testing...', jobId);
     try {
         await runBusinessLogicTesting(jobId, targetUrl, authHeader);
     } catch (e) {
@@ -450,7 +380,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 18] Cloud Security Testing...', jobId);
+    log('[STAGE 13] Cloud Security Testing...', jobId);
     try {
         await runCloudSecurityScanning(jobId, primaryDomain);
     } catch (e) {
@@ -458,7 +388,7 @@ export const runEnterpriseScan = async (
     }
 
     await ensureNotCancelled(jobId);
-    log('[STAGE 19] Advanced Authentication Testing...', jobId);
+    log('[STAGE 14] Advanced Authentication Testing...', jobId);
     try {
         await runAuthenticationTesting(jobId, targetUrl);
     } catch (e) {
