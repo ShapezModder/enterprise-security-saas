@@ -74,10 +74,7 @@ export default function EnterprisePlatform() {
             {/* 2. NAVIGATION (Sticky) */}
             <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#050505]/80 backdrop-blur-md">
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView("landing")}>
-                    <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-900 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(34,197,94,0.4)]">
-                        <Shield className="text-white" size={20} />
-                    </div>
-                    <span className="font-bold text-xl tracking-tight text-white">FORTRESS<span className="text-green-600">.ai</span></span>
+                    <img src="/logo.png" alt="fortress" className="h-10 w-auto" />
                 </div>
                 <div className="flex gap-4">
                     {view === 'admin' ? (
@@ -130,6 +127,9 @@ export default function EnterprisePlatform() {
                         <motion.div key="login" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="min-h-[80vh] flex items-center justify-center px-6">
                             <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 shadow-2xl relative overflow-hidden w-full max-w-md">
                                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-50"></div>
+                                <div className="text-center mb-6">
+                                    <h1 className="text-3xl font-bold text-green-500">fortress</h1>
+                                </div>
                                 <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><Lock className="text-green-500" /> Restricted Access</h2>
                                 <input type="password" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-4 text-white focus:border-green-500 outline-none mt-6 font-mono text-lg" placeholder="ENTER_ACCESS_KEY" />
                                 <button onClick={handleLogin} className="w-full mt-6 py-4 bg-green-900/30 text-green-400 border border-green-800 font-bold rounded-lg hover:bg-green-900/50 transition-all">AUTHENTICATE</button>

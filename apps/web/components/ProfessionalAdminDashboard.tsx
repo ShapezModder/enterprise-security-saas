@@ -140,9 +140,7 @@ export function ProfessionalAdminDashboard({ onLogout }: { onLogout: () => void 
                     <div className="flex justify-between items-center">
                         <div>
                             <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
-                                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                                    <Shield className="text-white" size={24} />
-                                </div>
+                                <span className="text-3xl font-bold text-green-600">Fortress</span>
                                 Security Operations Center
                             </h1>
                             <p className="text-slate-500 mt-1">Enterprise Security Assessment Platform</p>
@@ -178,8 +176,8 @@ export function ProfessionalAdminDashboard({ onLogout }: { onLogout: () => void 
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className={`border-2 rounded-lg p-5 transition-all cursor-pointer ${selectedJob?.id === job.id
-                                                ? 'border-emerald-500 bg-emerald-50'
-                                                : 'border-slate-200 bg-white hover:border-slate-300'
+                                            ? 'border-emerald-500 bg-emerald-50'
+                                            : 'border-slate-200 bg-white hover:border-slate-300'
                                             }`}
                                         onClick={() => setSelectedJob(job)}
                                     >
@@ -358,8 +356,8 @@ export function ProfessionalAdminDashboard({ onLogout }: { onLogout: () => void 
                                                                 <label
                                                                     key={stage.id}
                                                                     className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${stage.enabled
-                                                                            ? 'bg-emerald-50 border-emerald-300'
-                                                                            : 'bg-white border-slate-200 hover:border-slate-300'
+                                                                        ? 'bg-emerald-50 border-emerald-300'
+                                                                        : 'bg-white border-slate-200 hover:border-slate-300'
                                                                         }`}
                                                                 >
                                                                     <input
